@@ -16,5 +16,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "viem": "^2.5.0"
+  },
+  "dependencies": {
+    "eigenlayer-contracts": "github:Layr-Labs/eigenlayer-contracts",
+    "eigenlayer-middleware": "github:Layr-Labs/eigenlayer-middleware"
   }
 }
