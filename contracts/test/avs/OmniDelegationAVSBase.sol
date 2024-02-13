@@ -117,10 +117,12 @@ contract OmniDelegationAVSBase is Test {
 
         // TODO: two strategy quorum - mock native eth, mock erc20 (lst)
 
-        IStakeRegistry.StrategyParams[] memory quorumStrategiesConsideredAndMultipliers =
-            new IStakeRegistry.StrategyParams[](1);
+        IStakeRegistry.StrategyParams[][] memory quorumStrategiesConsideredAndMultipliers =
+            new IStakeRegistry.StrategyParams[][](1);
 
-        quorumStrategiesConsideredAndMultipliers[0] = IStakeRegistry.StrategyParams({
+         quorumStrategiesConsideredAndMultipliers[0] = new IStakeRegistry.StrategyParams[](1);
+
+        quorumStrategiesConsideredAndMultipliers[0][0] = IStakeRegistry.StrategyParams({
             strategy: IStrategy(mockStrategy),
             multiplier: uint96(WEIGHTING_DIVISOR) // TODO: what should this be?
          });
@@ -130,32 +132,31 @@ contract OmniDelegationAVSBase is Test {
 
         registryCoordinatorImplementation =
             new RegistryCoordinatorHarness(omniDelegationAVS, stakeRegistry, blsApkRegistry, indexRegistry);
-        {
-            delete operatorSetParams;
-            operatorSetParams.push(
-                IRegistryCoordinator.OperatorSetParam({
-                    maxOperatorCount: defaultMaxOperatorCount,
-                    kickBIPsOfOperatorStake: defaultKickBIPsOfOperatorStake,
-                    kickBIPsOfTotalStake: defaultKickBIPsOfTotalStake
-                })
-            );
 
-            proxyAdmin.upgradeAndCall(
-                TransparentUpgradeableProxy(payable(address(registryCoordinator))),
-                address(registryCoordinatorImplementation),
-                abi.encodeWithSelector(
-                    RegistryCoordinator.initialize.selector,
-                    registryCoordinatorOwner,
-                    churnApprover,
-                    ejector,
-                    pauserRegistry,
-                    0, /*initialPausedStatus*/
-                    operatorSetParams,
-                    minimumStakeForQuorum,
-                    quorumStrategiesConsideredAndMultipliers
-                )
-            );
-        }
+        delete operatorSetParams;
+        operatorSetParams.push(
+            IRegistryCoordinator.OperatorSetParam({
+                maxOperatorCount: defaultMaxOperatorCount,
+                kickBIPsOfOperatorStake: defaultKickBIPsOfOperatorStake,
+                kickBIPsOfTotalStake: defaultKickBIPsOfTotalStake
+            })
+        );
+
+        proxyAdmin.upgrade(
+            TransparentUpgradeableProxy(payable(address(registryCoordinator))),
+            address(registryCoordinatorImplementation)
+        );
+
+        registryCoordinator.initialize(
+                registryCoordinatorOwner,
+                churnApprover,
+                ejector,
+                pauserRegistry,
+                0, /*initialPausedStatus*/
+                operatorSetParams,
+                minimumStakeForQuorum,
+                quorumStrategiesConsideredAndMultipliers
+        );
 
         // operatorStateRetriever = new OperatorStateRetriever();
 
