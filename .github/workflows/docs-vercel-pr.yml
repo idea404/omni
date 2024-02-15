@@ -7,10 +7,11 @@ env:
   VERCEL_PROJECT_ID:  ${{ secrets.VERCEL_PROJECT_ID }}
 
 on:
-  pull_request:
-    types: [opened, synchronize, closed, edited]
-    paths:
-      - 'docs/site/**/*'
+  # pull_request:
+  #   types: [opened, synchronize, closed, edited]
+  #   paths:
+  #     - 'docs/site/**/*'
+  workflow_dispatch:
 
 jobs:
   capture_vercel_preview_url:
