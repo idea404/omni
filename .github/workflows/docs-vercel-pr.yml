@@ -17,4 +17,6 @@ jobs:
     if: ${{ github.event.action != 'closed' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Set Valid Vercel Project Name
+        run: echo "VERCEL_PROJECT_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')" >> $GITHUB_ENV
       - uses: snaplet/vercel-action@v3
