@@ -1,4 +1,4 @@
-name: Vercel Preview Deployment
+name: Vercel Preview PR Comment
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -22,3 +22,14 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
       - name: Deploy Project Artifacts to Vercel
         run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+  Comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on PR
+        if: github.event.deployment_status.state == 'success'
+        uses: unsplash/comment-on-pr@v1.3.0
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+        with:
+          msg: 'Preview URL: ${{ github.event.deployment_status.target_url }}'
+          check_for_duplicate_msg: true
