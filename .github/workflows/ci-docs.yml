@@ -6,7 +6,7 @@ on:
         - 'docs/site/**'
 
 jobs:
-  build-and-deploy:
+  deploy-preview:
     runs-on: ubuntu-latest
     environment: preview
 
@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-      
+
       - name: Install pnpm
         run: npm install -g pnpm
 
