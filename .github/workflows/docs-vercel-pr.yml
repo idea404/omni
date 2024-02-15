@@ -1,0 +1,36 @@
+# .github/workflows/preview.yml
+
+name: Preview Environment
+
+env:
+  VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_PROJECT_ID:  ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  # pull_request:
+  #   types: [opened, synchronize, closed, edited]
+  #   paths:
+  #     - 'docs/site/**/*'
+  workflow_dispatch:
+
+jobs:
+  capture_vercel_preview_url:
+    name: Capture Vercel preview URL
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: aaimio/vercel-preview-url-action@v2.2.0
+        id: vercel_preview_url
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Below is but an example of what you could do with the preview URL.
+      # The preview URL is accessed through ${{ steps.<step_id>.outputs.vercel_preview_url }}
+      - uses: actions/github-script@v3
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'The preview URL is: ${{ steps.vercel_preview_url.outputs.vercel_preview_url }}.'
+            });
