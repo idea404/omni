@@ -1,4 +1,4 @@
-name: Deploy Docusaurus Site to Preview Environment
+name: ci docs
 
 on:
   pull_request:
