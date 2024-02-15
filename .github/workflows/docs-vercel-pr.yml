@@ -1,36 +1,27 @@
-name: Vercel Preview PR Comment
+# .github/workflows/preview.yml
+
+name: Preview Environment
+
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+  VERCEL_PROJECT_ID:  ${{ secrets.VERCEL_PROJECT_ID }}
+
 on:
-  push:
-    branches-ignore:
-      - main
+  pull_request:
+    types: [opened, synchronize, closed, edited]
+    paths:
+      - 'docs/site/**/*'
+
 jobs:
-  Deploy-Preview:
+  deploy:
+    if: ${{ github.event.action != 'closed' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-      - name: Install PNPM
-        run: npm install -g pnpm
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Build Project Artifacts
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
-      - name: Deploy Project Artifacts to Vercel
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
-  Comment:
+      - uses: snaplet/vercel-action@v3
+  delete:
+    if: ${{ github.event.action == 'closed' }}
     runs-on: ubuntu-latest
-    needs: Deploy-Preview
     steps:
-      - name: Comment on PR
-        if: github.event.deployment_status.state == 'success'
-        uses: unsplash/comment-on-pr@v1.3.0
-        env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+      - uses: snaplet/vercel-action@v3
         with:
-          msg: 'Preview URL: ${{ github.event.deployment_status.target_url }}'
-          check_for_duplicate_msg: true
+          delete: true
