@@ -5,7 +5,7 @@ id: vision
 
 # Vision
 
-Omni is a restaking secured blockchain purpose built to connect all of Ethereum's rollups, empowering developers to build apps across all L2s.
+The Omni Network is a restaking secured blockchain purpose built to connect all of Ethereum's rollups, empowering developers to build apps across all L2s.
 
 With the launch of rollups the Ethereum ecosystem has solved the problem of expensive transactions. However, this has come at the cost of fragmentation. Now users, their capital and applications are scattered across an array of rollup solutions. Through leveraging new technologies like restaking, Omni solves this fragmentation by providing by far the most secure and simple way to deploy cross-rollup applications for Ethereum developers.
 
