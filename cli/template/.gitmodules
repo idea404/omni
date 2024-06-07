@@ -1,0 +1,6 @@
+[submodule "lib/omni"]
+	path = cli/template/lib/omni
+	url = ../..
+[submodule "lib/forge-std"]
+	path = cli/template/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
