@@ -3,7 +3,7 @@
 
 # The version of the Halo binary that created or
 # last modified the config file. Do not modify this.
-version = "v0.1.8"
+version = "v0.1.9"
 
 # Omni network to participate in: mainnet, testnet, or devnet.
 network = ""
@@ -17,9 +17,6 @@ private-key = "relayer.key"
 
 # The URL of the halo node to connect to.
 halo-url = "localhost:26657"
-
-# The path to the relayer state file used to track cursors.
-state-file = "relayer-state.json"
 
 #######################################################################
 ###                             X-Chain                             ###

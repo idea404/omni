@@ -8,6 +8,8 @@ import (
 	"github.com/omni-network/omni/halo/evmstaking"
 	portalmodule "github.com/omni-network/omni/halo/portal/module"
 	portaltypes "github.com/omni-network/omni/halo/portal/types"
+	registrymodule "github.com/omni-network/omni/halo/registry/module"
+	registrytypes "github.com/omni-network/omni/halo/registry/types"
 	valsyncmodule "github.com/omni-network/omni/halo/valsync/module"
 	valsynctypes "github.com/omni-network/omni/halo/valsync/types"
 
@@ -198,6 +200,10 @@ var (
 			{
 				Name:   portaltypes.ModuleName,
 				Config: appconfig.WrapAny(&portalmodule.Module{}),
+			},
+			{
+				Name:   registrytypes.ModuleName,
+				Config: appconfig.WrapAny(&registrymodule.Module{}),
 			},
 		},
 	})

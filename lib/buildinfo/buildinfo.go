@@ -13,7 +13,7 @@ import (
 
 // version of the whole omni-monorepo and all binaries built from this git commit.
 // This value is set by goreleaser at build-time and should be the git tag for official releases.
-var version = "v0.1.8"
+var version = "v0.1.9"
 
 // unknown is the default value for the git commit hash and timestamp.
 const unknown = "unknown"
@@ -46,7 +46,7 @@ func NewVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version information of this binary",
 		Args:  cobra.NoArgs,
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
 			commit, timestamp := get()
 
 			var sb strings.Builder

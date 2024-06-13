@@ -1,6 +1,10 @@
 package netconf
 
-import "github.com/omni-network/omni/lib/errors"
+import (
+	"fmt"
+
+	"github.com/omni-network/omni/lib/errors"
+)
 
 // ID is a network identifier.
 type ID string
@@ -36,6 +40,22 @@ func (i ID) Version() string {
 	return i.Static().Version
 }
 
+func (i ID) ExecutionRPC() string {
+	if i == Devnet {
+		return "http://localhost:8001"
+	}
+
+	return fmt.Sprintf("https://%s.omni.network", i)
+}
+
+func (i ID) ConsensusRPC() string {
+	if i == Devnet {
+		return "http://localhost:5701"
+	}
+
+	return fmt.Sprintf("https://rpc.consensus.%s.omni.network", i)
+}
+
 const (
 	// Simnet is a simulated network for very simple testing of individual binaries.
 	// It is a single binary with mocked clients (no networking).
@@ -52,8 +72,8 @@ const (
 	// E.g. 1 Erigon, 1 Geth, 4 halo validators, 2 halo sentries, 1 relayer.
 	Staging ID = "staging"
 
-	// Testnet is the Omni public testnet.
-	Testnet ID = "testnet"
+	// Omega is a Omni public testnet.
+	Omega ID = "omega"
 
 	// Mainnet is the Omni public mainnet.
 	Mainnet ID = "mainnet"
@@ -66,7 +86,7 @@ var supported = map[ID]bool{
 	Simnet:  true,
 	Devnet:  true,
 	Staging: true,
-	Testnet: true,
+	Omega:   true,
 	Mainnet: true,
 }
 

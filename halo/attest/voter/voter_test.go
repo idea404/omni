@@ -19,6 +19,8 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	k1 "github.com/cometbft/cometbft/crypto/secp256k1"
 
+	"github.com/ethereum/go-ethereum/common"
+
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/require"
 )
@@ -342,6 +344,7 @@ func (w *wrappedVoter) Add(t *testing.T, chainID, offset uint64) {
 		SourceChainID: chainID,
 		ConfLevel:     xchain.ConfFinalized,
 		BlockOffset:   offset,
+		BlockHash:     common.Hash{},
 	}
 
 	err := w.v.Vote(block, false)
@@ -355,6 +358,7 @@ func (w *wrappedVoter) Propose(t *testing.T, chainID, offset uint64) {
 		ChainId:   chainID,
 		ConfLevel: uint32(xchain.ConfFinalized),
 		Offset:    offset,
+		Hash:      common.Hash{}.Bytes(),
 	}
 
 	err := w.v.SetProposed([]*types.BlockHeader{header})
@@ -368,6 +372,7 @@ func (w *wrappedVoter) Commit(t *testing.T, chainID, offset uint64) {
 		ChainId:   chainID,
 		ConfLevel: uint32(xchain.ConfFinalized),
 		Offset:    offset,
+		Hash:      common.Hash{}.Bytes(),
 	}
 
 	err := w.v.SetCommitted([]*types.BlockHeader{header})
@@ -511,7 +516,7 @@ func testNetwork(chainIDs ...uint64) netconf.Network {
 		chains = append(chains, netconf.Chain{
 			ID:     id,
 			Name:   fmt.Sprintf("chain_%d", id),
-			Shards: []uint64{netconf.ShardFinalized0},
+			Shards: []xchain.ShardID{xchain.ShardFinalized0},
 		})
 	}
 

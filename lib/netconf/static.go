@@ -8,12 +8,11 @@ import (
 
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/evmchain"
+	"github.com/omni-network/omni/lib/xchain"
 
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/google/uuid"
-
-	_ "embed"
 )
 
 const consensusIDPrefix = "omni-"
@@ -49,6 +48,17 @@ func (s Static) OmniConsensusChainIDStr() string {
 // It is calculated as 1_000_000 + OmniExecutionChainID.
 func (s Static) OmniConsensusChainIDUint64() uint64 {
 	return consensusIDOffset + s.OmniExecutionChainID
+}
+
+// OmniConsensusChain returns the omni consensus Chain struct.
+func (s Static) OmniConsensusChain() Chain {
+	return Chain{
+		ID:           s.OmniConsensusChainIDUint64(),
+		Name:         "omni_consensus",
+		BlockPeriod:  time.Second * 2,
+		Shards:       []xchain.ShardID{xchain.ShardBroadcast0}, // Consensus chain only supports broadcast shard.
+		DeployHeight: 1,                                        // Emit portal blocks start at 1, not 0.
+	}
 }
 
 // PortalDeployment returns the portal deployment for the given chainID.
@@ -92,26 +102,10 @@ var runid = uuid.New().String()
 
 //nolint:gochecknoglobals // Static addresses
 var (
-	// Address matches lib/contracts.TestnetPortal() and lib/contracts.TestnetAVS().
-	// We do not import to avoid cylic dependencies.
-	testnetPortal = common.HexToAddress("0xFf22F3532C19a6f890c52c4CfcDB94007aA471Dc")
-	testnetAVS    = common.HexToAddress("0xa7b2e7830C51728832D33421670DbBE30299fD92")
-
-	// This address DOES NOT match lib/contracts.MainnetAVS().
-	// This mainnet AVS was deployed outside of the e2e deployment flow, without Create3.
+	// Address matches lib/contracts. We do not import to avoid cylic dependencies. Equivalence asserted in tests.
+	// testnetPortal = common.HexToAddress("0xFf22F3532C19a6f890c52c4CfcDB94007aA471Dc").
+	testnetAVS = common.HexToAddress("0xa7b2e7830C51728832D33421670DbBE30299fD92")
 	mainnetAVS = common.HexToAddress("0xed2f4d90b073128ae6769a9A8D51547B1Df766C8")
-
-	//go:embed testnet/consensus-genesis.json
-	testnetConsensusGenesisJSON []byte
-
-	//go:embed testnet/consensus-seeds.txt
-	testnetConsensusSeedsTXT []byte
-
-	//go:embed testnet/execution-genesis.json
-	testnetExecutionGenesisJSON []byte
-
-	//go:embed testnet/execution-seeds.txt
-	testnetExecutionSeedsTXT []byte
 )
 
 //nolint:gochecknoglobals // Static mappings.
@@ -131,32 +125,12 @@ var statics = map[ID]Static{
 		OmniExecutionChainID: evmchain.IDOmniEphemeral,
 		MaxValidators:        maxValidators,
 	},
-	Testnet: {
+	Omega: {
 		Version:              "v0.0.2",
 		AVSContractAddress:   testnetAVS,
-		OmniExecutionChainID: evmchain.IDOmniTestnet,
+		OmniExecutionChainID: evmchain.IDOmniOmega,
 		MaxValidators:        maxValidators,
-		Portals: []Deployment{
-			{
-				ChainID:      evmchain.IDHolesky,
-				Address:      testnetPortal,
-				DeployHeight: 1357819,
-			},
-			{
-				ChainID:      evmchain.IDOpSepolia,
-				Address:      testnetPortal,
-				DeployHeight: 10731455,
-			},
-			{
-				ChainID:      evmchain.IDArbSepolia,
-				Address:      testnetPortal,
-				DeployHeight: 34237972,
-			},
-		},
-		ConsensusGenesisJSON: testnetConsensusGenesisJSON,
-		ConsensusSeedTXT:     testnetConsensusSeedsTXT,
-		ExecutionGenesisJSON: testnetExecutionGenesisJSON,
-		ExecutionSeedTXT:     testnetExecutionSeedsTXT,
+		Portals:              []Deployment{},
 	},
 	Mainnet: {
 		Version:            "v0.0.1",
@@ -197,19 +171,15 @@ func SimnetNetwork() Network {
 	return Network{
 		ID: Simnet,
 		Chains: []Chain{
-			mustSimnetChain(Simnet.Static().OmniExecutionChainID, ShardFinalized0),
-			mustSimnetChain(evmchain.IDMockL1Fast, ShardLatest0),
-			mustSimnetChain(evmchain.IDMockL2, ShardLatest0),
-			{
-				ID:     Simnet.Static().OmniConsensusChainIDUint64(),
-				Name:   "omni_consensus",
-				Shards: []uint64{ShardFinalized0},
-			},
+			mustSimnetChain(Simnet.Static().OmniExecutionChainID, xchain.ShardFinalized0),
+			mustSimnetChain(evmchain.IDMockL1Fast, xchain.ShardLatest0),
+			mustSimnetChain(evmchain.IDMockL2, xchain.ShardLatest0),
+			Simnet.Static().OmniConsensusChain(),
 		},
 	}
 }
 
-func mustSimnetChain(id uint64, shard uint64) Chain {
+func mustSimnetChain(id uint64, shard xchain.ShardID) Chain {
 	meta, ok := evmchain.MetadataByID(id)
 	if !ok {
 		panic("missing chain metadata")
@@ -219,6 +189,6 @@ func mustSimnetChain(id uint64, shard uint64) Chain {
 		ID:          meta.ChainID,
 		Name:        meta.Name,
 		BlockPeriod: time.Millisecond * 500, // Speed up block times for testing
-		Shards:      []uint64{shard},
+		Shards:      []xchain.ShardID{shard},
 	}
 }

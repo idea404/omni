@@ -8,6 +8,7 @@ import (
 	"github.com/omni-network/omni/halo/valsync/keeper"
 	"github.com/omni-network/omni/halo/valsync/types"
 	"github.com/omni-network/omni/lib/errors"
+	"github.com/omni-network/omni/lib/ethclient"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 
@@ -143,7 +144,8 @@ type ModuleInputs struct {
 	SKeeper      types.StakingKeeper
 	AKeeper      types.AttestKeeper
 	Subscriber   types.ValSetSubscriber
-	Portal       ptypes.Portal
+	Portal       ptypes.EmitPortal
+	EthClient    ethclient.Client
 }
 
 type ModuleOutputs struct {
@@ -155,12 +157,12 @@ type ModuleOutputs struct {
 
 func ProvideModule(in ModuleInputs) (ModuleOutputs, error) {
 	k, err := keeper.NewKeeper(
-		in.Cdc,
 		in.StoreService,
 		in.SKeeper,
 		in.AKeeper,
 		in.Subscriber,
 		in.Portal,
+		in.EthClient,
 	)
 	if err != nil {
 		return ModuleOutputs{}, err

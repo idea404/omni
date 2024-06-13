@@ -31,12 +31,12 @@ func TestWorker_Run(t *testing.T) {
 	streamA := xchain.StreamID{
 		SourceChainID: srcChain,
 		DestChainID:   destChainA,
-		ShardID:       netconf.ShardFinalized0,
+		ShardID:       xchain.ShardFinalized0,
 	}
 	streamB := xchain.StreamID{
 		SourceChainID: srcChain,
 		DestChainID:   destChainB,
-		ShardID:       netconf.ShardLatest0,
+		ShardID:       xchain.ShardLatest0,
 	}
 	cursors := map[xchain.StreamID]xchain.SubmitCursor{
 		streamA: {StreamID: streamA, MsgOffset: destChainACursor, BlockOffset: destChainACursor},
@@ -133,19 +133,22 @@ func TestWorker_Run(t *testing.T) {
 	}
 
 	network := netconf.Network{Chains: []netconf.Chain{
-		{ID: srcChain, Name: "source", Shards: []uint64{netconf.ShardFinalized0, netconf.ShardLatest0}},
+		{ID: srcChain, Name: "source", Shards: []xchain.ShardID{xchain.ShardFinalized0, xchain.ShardLatest0}},
 		{ID: destChainA, Name: "mock_l1"},
 		{ID: destChainB, Name: "mock_l2"},
 	}}
 
-	state := NewEmptyState("/tmp/relayer-state.json")
-
 	noAwait := func(context.Context, uint64) error { return nil }
 
 	for _, chain := range network.Chains {
-		w := NewWorker(chain, network, mockProvider, mockXClient, mockCreateFunc, func() (SendFunc, error) {
-			return mockSender.SendTransaction, nil
-		}, state, noAwait)
+		w := NewWorker(
+			chain,
+			network,
+			mockProvider,
+			mockXClient,
+			mockCreateFunc,
+			func() (SendFunc, error) { return mockSender.SendTransaction, nil },
+			noAwait)
 		go w.Run(ctx)
 	}
 

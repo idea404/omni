@@ -27,14 +27,13 @@ type Worker struct {
 	cProvider    cchain.Provider
 	xProvider    xchain.Provider
 	creator      CreateFunc
-	state        *State
 	sendProvider func() (SendFunc, error)
 	awaitValSet  awaitValSet
 }
 
 // NewWorker creates a new worker for a single destination chain.
 func NewWorker(destChain netconf.Chain, network netconf.Network, cProvider cchain.Provider,
-	xProvider xchain.Provider, creator CreateFunc, sendProvider func() (SendFunc, error), state *State,
+	xProvider xchain.Provider, creator CreateFunc, sendProvider func() (SendFunc, error),
 	awaitValSet awaitValSet,
 ) *Worker {
 	return &Worker{
@@ -44,7 +43,6 @@ func NewWorker(destChain netconf.Chain, network netconf.Network, cProvider cchai
 		xProvider:    xProvider,
 		creator:      creator,
 		sendProvider: sendProvider,
-		state:        state,
 		awaitValSet:  awaitValSet,
 	}
 }
@@ -59,10 +57,6 @@ func (w *Worker) Run(ctx context.Context) {
 		}
 
 		log.Error(ctx, "Worker failed, resetting", err)
-
-		if err := w.state.Clear(w.destChain.ID); err != nil {
-			log.Error(ctx, "Failed to clear worker state", err)
-		}
 
 		workerResets.WithLabelValues(w.destChain.Name).Inc()
 		backoff()
@@ -80,6 +74,14 @@ func (w *Worker) runOnce(ctx context.Context) error {
 		return err
 	}
 
+	for _, cursor := range cursors {
+		log.Info(ctx, "Worker fetched submitted cursor",
+			"stream", w.network.StreamName(cursor.StreamID),
+			"block_offset", cursor.BlockOffset,
+			"msg_offset", cursor.MsgOffset,
+		)
+	}
+
 	sender, err := w.sendProvider()
 	if err != nil {
 		return err
@@ -87,7 +89,7 @@ func (w *Worker) runOnce(ctx context.Context) error {
 
 	buf := newActiveBuffer(w.destChain.Name, mempoolLimit, sender)
 
-	blockOffsets, err := fromChainVersionOffsets(w.destChain.ID, cursors, w.network.ChainVersionsTo(w.destChain.ID), w.state)
+	blockOffsets, err := fromChainVersionOffsets(cursors, w.network.ChainVersionsTo(w.destChain.ID))
 	if err != nil {
 		return err
 	}
@@ -103,10 +105,9 @@ func (w *Worker) runOnce(ctx context.Context) error {
 			return errors.New("unexpected chain version [BUG]")
 		}
 
-		callback := newCallback(w.xProvider, msgFilter, w.creator, buf.AddInput, w.destChain.ID, newMsgStreamMapper(w.network), w.awaitValSet)
-		wrapCb := wrapStatePersist(callback, w.state, w.destChain.ID)
+		callback := w.newCallback(msgFilter, buf.AddInput, newMsgStreamMapper(w.network))
 
-		w.cProvider.Subscribe(ctx, chainVer, fromOffset, w.destChain.Name, wrapCb)
+		w.cProvider.Subscribe(ctx, chainVer, fromOffset, w.destChain.Name, callback)
 
 		logAttrs = append(logAttrs, w.network.ChainVersionName(chainVer), fromOffset)
 	}
@@ -129,7 +130,7 @@ func newValSetAwaiter(portal *bindings.OmniPortal, blockPeriod time.Duration) aw
 		backoff := expbackoff.New(ctx, expbackoff.WithPeriodicConfig(blockPeriod))
 		var attempt int
 		for ctx.Err() == nil {
-			power, err := portal.ValidatorSetTotalPower(&bind.CallOpts{Context: ctx}, valsetID)
+			power, err := portal.ValSetTotalPower(&bind.CallOpts{Context: ctx}, valsetID)
 			if err != nil {
 				return errors.Wrap(err, "get validator set power")
 			}
@@ -184,17 +185,13 @@ func newMsgStreamMapper(network netconf.Network) msgStreamMapper {
 	}
 }
 
-func newCallback(
-	xProvider xchain.Provider,
+func (w *Worker) newCallback(
 	msgFilter *msgCursorFilter,
-	creator CreateFunc,
 	sender SendFunc,
-	destChainID uint64,
 	msgStreamMapper msgStreamMapper,
-	awaitValSet awaitValSet,
 ) cchain.ProviderCallback {
 	return func(ctx context.Context, att xchain.Attestation) error {
-		block, ok, err := fetchXBlock(ctx, xProvider, att)
+		block, ok, err := fetchXBlock(ctx, w.xProvider, att)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -208,18 +205,18 @@ func newCallback(
 
 		// Split into streams
 		for streamID, msgs := range msgStreamMapper(block.Msgs) {
-			if streamID.DestChainID != destChainID {
+			if streamID.DestChainID != w.destChain.ID {
 				continue // Skip streams not destined for this worker.
 			} else if !attestationForShard(att, streamID.ShardID) {
 				continue // Skip streams not applicable to this attestation.
 			}
 
-			if err := awaitValSet(ctx, att.ValidatorSetID); err != nil {
+			if err := w.awaitValSet(ctx, att.ValidatorSetID); err != nil {
 				return errors.Wrap(err, "await validator set")
 			}
 
 			// Filter out any previously submitted message offsets
-			msgs, err = filterMsgs(ctx, streamID, att.ValidatorSetID, msgs, msgFilter)
+			msgs, err = filterMsgs(ctx, streamID, w.network.StreamName, msgs, msgFilter)
 			if err != nil {
 				return err
 			} else if len(msgs) == 0 {
@@ -233,7 +230,7 @@ func newCallback(
 				Tree:        tree,
 			}
 
-			submissions, err := creator(update)
+			submissions, err := w.creator(update)
 			if err != nil {
 				return err
 			}
@@ -243,21 +240,6 @@ func newCallback(
 					return err
 				}
 			}
-		}
-
-		return nil
-	}
-}
-
-// wrapStatePersist wraps a provider callback, persisting successful processed block offsets per chain version to local state.
-func wrapStatePersist(cb cchain.ProviderCallback, state *State, destChainID uint64) cchain.ProviderCallback {
-	return func(ctx context.Context, att xchain.Attestation) error {
-		if err := cb(ctx, att); err != nil {
-			return err
-		}
-
-		if err := state.Persist(destChainID, att.ChainVersion(), att.BlockOffset); err != nil {
-			return errors.Wrap(err, "persist state")
 		}
 
 		return nil
@@ -334,10 +316,10 @@ func verifyAttBlock(att xchain.Attestation, block xchain.Block) error {
 
 // attestationForShard returns true if the attestation proof contains messages for the shard.
 // Fuzzy attestations cannot be used to prove finalized shards. But finalized attestations can prove all shards.
-func attestationForShard(att xchain.Attestation, shard uint64) bool {
+func attestationForShard(att xchain.Attestation, shard xchain.ShardID) bool {
 	if att.ConfLevel == xchain.ConfFinalized {
 		return true // Finalized attestation, matches all streams.
 	}
 
-	return att.ConfLevel == xchain.ConfFromShard(shard)
+	return att.ConfLevel == shard.ConfLevel()
 }

@@ -2,6 +2,7 @@ package types
 
 import (
 	"github.com/omni-network/omni/lib/errors"
+	"github.com/omni-network/omni/lib/xchain"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -22,6 +23,6 @@ const (
 	msgTypeSentinel MsgType = 2 // Must be last
 )
 
-type Portal interface {
-	CreateMsg(ctx sdk.Context, typ MsgType, msgTypeID uint64) error
+type EmitPortal interface {
+	CreateMsg(ctx sdk.Context, typ MsgType, msgTypeID uint64, destChainID uint64, shardID xchain.ShardID) error
 }

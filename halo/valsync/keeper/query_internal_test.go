@@ -80,7 +80,7 @@ func TestValidatorSet(t *testing.T) {
 
 			for i, set := range tt.populate {
 				sdkCtx = sdkCtx.WithBlockHeight(int64(i + 1))
-				err := keeper.insertValidatorSet(sdkCtx, clone(set), i == 0)
+				_, err := keeper.insertValidatorSet(sdkCtx, clone(set), i == 0)
 				require.NoError(t, err)
 			}
 
@@ -112,6 +112,8 @@ func approvedExpectation() expectation {
 			gomock.Any(),
 			ptypes.MsgTypeValSet,
 			gomock.Any(),
+			xchain.BroadcastChainID,
+			xchain.ShardBroadcast0,
 		).AnyTimes().
 			Return(nil)
 
@@ -134,6 +136,8 @@ func defaultExpectation() expectation {
 			gomock.Any(),
 			ptypes.MsgTypeValSet,
 			gomock.Any(),
+			xchain.BroadcastChainID,
+			xchain.ShardBroadcast0,
 		).AnyTimes().
 			Return(nil)
 	}

@@ -7,6 +7,7 @@ import (
 	evmengkeeper "github.com/omni-network/omni/halo/evmengine/keeper"
 	"github.com/omni-network/omni/halo/evmslashing"
 	"github.com/omni-network/omni/halo/evmstaking"
+	registrykeeper "github.com/omni-network/omni/halo/registry/keeper"
 	valsynckeeper "github.com/omni-network/omni/halo/valsync/keeper"
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/ethclient"
@@ -62,6 +63,7 @@ type App struct {
 	EVMEngKeeper          *evmengkeeper.Keeper
 	AttestKeeper          *attestkeeper.Keeper
 	ValSyncKeeper         *valsynckeeper.Keeper
+	RegistryKeeper        registrykeeper.Keeper
 }
 
 // newApp returns a reference to an initialized App.
@@ -76,7 +78,10 @@ func newApp(
 	depCfg := depinject.Configs(
 		DepConfig(),
 		depinject.Supply(
-			logger, engineCl, namer, voter,
+			logger,
+			engineCl,
+			namer,
+			voter,
 		),
 	)
 
@@ -98,6 +103,7 @@ func newApp(
 		&app.EVMEngKeeper,
 		&app.AttestKeeper,
 		&app.ValSyncKeeper,
+		&app.RegistryKeeper,
 	); err != nil {
 		return nil, errors.Wrap(err, "dep inject")
 	}
@@ -117,7 +123,9 @@ func newApp(
 	app.EVMEngKeeper.SetVoteProvider(app.AttestKeeper)
 	app.EVMEngKeeper.AddEventProcessor(evmStaking)
 	app.EVMEngKeeper.AddEventProcessor(evmSlashing)
+	app.EVMEngKeeper.AddEventProcessor(app.RegistryKeeper)
 	app.AttestKeeper.SetValidatorProvider(app.ValSyncKeeper)
+	app.AttestKeeper.SetPortalRegistry(app.RegistryKeeper)
 
 	baseAppOpts = append(baseAppOpts, func(bapp *baseapp.BaseApp) {
 		// Use evm engine to create block proposals.

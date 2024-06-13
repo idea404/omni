@@ -113,6 +113,10 @@ func Deploy(ctx context.Context, def Definition, cfg DeployConfig) (*pingpong.XD
 		return nil, err
 	}
 
+	if err := setupTokenBridge(ctx, def); err != nil {
+		return nil, errors.Wrap(err, "setup token bridge")
+	}
+
 	if cfg.PingPongN == 0 {
 		return nil, nil //nolint:nilnil // No ping pong, no XDapp to return.
 	}
@@ -170,6 +174,10 @@ func E2ETest(ctx context.Context, def Definition, cfg E2ETestConfig) error {
 		return err
 	}
 
+	if err := testBridge(ctx, def); err != nil {
+		return errors.Wrap(err, "test bridge")
+	}
+
 	stopReceiptMonitor := StartMonitoringReceipts(ctx, def)
 
 	stopValidatorUpdates := StartValidatorUpdates(ctx, def)
@@ -211,7 +219,8 @@ func E2ETest(ctx context.Context, def Definition, cfg E2ETestConfig) error {
 		}
 	}
 
-	if err := WaitAllSubmissions(ctx, def.Netman().Portals(), sum(msgBatches)); err != nil {
+	network := networkFromDef(def)
+	if err := WaitAllSubmissions(ctx, network, def.Netman().Portals(), sum(msgBatches)); err != nil {
 		return err
 	}
 

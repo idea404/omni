@@ -2,7 +2,6 @@ package relayer
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/omni-network/omni/contracts/bindings"
 	"github.com/omni-network/omni/halo/genutil/evm/predeploys"
@@ -58,13 +57,6 @@ func Run(ctx context.Context, cfg Config) error {
 	cprov := cprovider.NewABCIProvider(tmClient, network.ID, netconf.ChainVersionNamer(cfg.Network))
 	xprov := xprovider.New(network, rpcClientPerChain, cprov)
 
-	state, ok, err := LoadCursors(cfg.StateFile)
-	if err != nil {
-		return err
-	} else if !ok {
-		state = NewEmptyState(cfg.StateFile)
-	}
-
 	for _, destChain := range network.EVMChains() {
 		// Setup sender
 		sendProvider := func() (SendFunc, error) {
@@ -91,7 +83,6 @@ func Run(ctx context.Context, cfg Config) error {
 			xprov,
 			CreateSubmissions,
 			sendProvider,
-			state,
 			awaitValSet)
 
 		go worker.Run(ctx)
@@ -109,7 +100,7 @@ func Run(ctx context.Context, cfg Config) error {
 }
 
 func newClient(tmNodeAddr string) (client.Client, error) {
-	c, err := http.New(fmt.Sprintf("tcp://%s", tmNodeAddr), "/websocket")
+	c, err := http.New("tcp://"+tmNodeAddr, "/websocket")
 	if err != nil {
 		return nil, errors.Wrap(err, "new tendermint client")
 	}

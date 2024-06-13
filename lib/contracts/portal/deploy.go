@@ -36,6 +36,10 @@ const (
 	XReceiptMaxErrorBytes = uint16(256)
 )
 
+func isDeadOrEmpty(addr common.Address) bool {
+	return addr == common.Address{} || addr == common.HexToAddress(eoa.ZeroXDead)
+}
+
 func (cfg DeploymentConfig) Validate() error {
 	if (cfg.Create3Factory == common.Address{}) {
 		return errors.New("create3 factory is zero")
@@ -46,11 +50,11 @@ func (cfg DeploymentConfig) Validate() error {
 	if (cfg.ProxyAdmin == common.Address{}) {
 		return errors.New("proxy admin is zero")
 	}
-	if (cfg.Deployer == common.Address{}) {
-		return errors.New("deployer is zero")
+	if isDeadOrEmpty(cfg.Deployer) {
+		return errors.New("deployer is not set")
 	}
-	if (cfg.Owner == common.Address{}) {
-		return errors.New("owner is zero")
+	if isDeadOrEmpty(cfg.Owner) {
+		return errors.New("owner is not set")
 	}
 	if cfg.XMsgMinGasLimit == 0 {
 		return errors.New("xmsg min gas limit is zero")
@@ -83,7 +87,7 @@ func getDeployCfg(chainID uint64, network netconf.ID) (DeploymentConfig, error) 
 		return mainnetCfg(), nil
 	}
 
-	if network == netconf.Testnet {
+	if network == netconf.Omega {
 		return testnetCfg(), nil
 	}
 
@@ -107,12 +111,12 @@ func mainnetCfg() DeploymentConfig {
 func testnetCfg() DeploymentConfig {
 	return DeploymentConfig{
 		Create3Factory:        contracts.TestnetCreate3Factory(),
-		Create3Salt:           contracts.PortalSalt(netconf.Testnet),
-		Owner:                 eoa.MustAddress(netconf.Testnet, eoa.RolePortalAdmin),
-		Deployer:              eoa.MustAddress(netconf.Testnet, eoa.RoleDeployer),
+		Create3Salt:           contracts.PortalSalt(netconf.Omega),
+		Owner:                 eoa.MustAddress(netconf.Omega, eoa.RolePortalAdmin),
+		Deployer:              eoa.MustAddress(netconf.Omega, eoa.RoleDeployer),
 		ProxyAdmin:            contracts.TestnetProxyAdmin(),
-		OmniChainID:           netconf.Testnet.Static().OmniExecutionChainID,
-		OmniCChainID:          netconf.Testnet.Static().OmniConsensusChainIDUint64(),
+		OmniChainID:           netconf.Omega.Static().OmniExecutionChainID,
+		OmniCChainID:          netconf.Omega.Static().OmniConsensusChainIDUint64(),
 		XMsgMinGasLimit:       XMsgMinGasLimit,
 		XMsgMaxGasLimit:       XMsgMaxGasLimit,
 		XReceiptMaxErrorBytes: XReceiptMaxErrorBytes,
@@ -156,7 +160,7 @@ func AddrForNetwork(network netconf.ID) (common.Address, bool) {
 	switch network {
 	case netconf.Mainnet:
 		return contracts.MainnetPortal(), true
-	case netconf.Testnet:
+	case netconf.Omega:
 		return contracts.TestnetPortal(), true
 	case netconf.Staging:
 		return contracts.StagingPortal(), true

@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/require"
-	"math/rand/v2"
 )
 
 func TestCursor(t *testing.T) {
@@ -35,7 +35,7 @@ func TestCursor(t *testing.T) {
 				PortalAddress: common.Address([]byte("0x268bb5F3d4301b591288390E76b97BE8E8B1Ca82")),
 				DeployHeight:  0,
 				BlockPeriod:   time.Duration(1) * time.Second,
-				Shards:        []uint64{netconf.ShardLatest0},
+				Shards:        []xchain.ShardID{xchain.ShardLatest0},
 			},
 			blocks: 5,
 		},
@@ -47,7 +47,7 @@ func TestCursor(t *testing.T) {
 				PortalAddress: common.Address([]byte("0x268bb5F3d4301b591288390E76b97BE8E8B1Ca82")),
 				DeployHeight:  10687126,
 				BlockPeriod:   time.Duration(2) * time.Second,
-				Shards:        []uint64{netconf.ShardLatest0},
+				Shards:        []xchain.ShardID{xchain.ShardLatest0},
 			},
 			blocks: 10,
 		},

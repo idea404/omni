@@ -4,10 +4,8 @@ import (
 	"math/big"
 
 	"github.com/omni-network/omni/contracts/bindings"
-	"github.com/omni-network/omni/e2e/app/eoa"
 	"github.com/omni-network/omni/halo/genutil/evm/state"
 	"github.com/omni-network/omni/lib/errors"
-	"github.com/omni-network/omni/lib/netconf"
 	"github.com/omni-network/omni/lib/solc"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -30,9 +28,10 @@ const (
 	ProxyAdmin = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 	// Omni Predeploys.
-	XRegistry      = "0x121E240000000000000000000000000000000001"
-	PortalRegistry = "0x121E240000000000000000000000000000000002"
-	EthStakeInbox  = "0x121E240000000000000000000000000000000003"
+	XRegistry        = "0x121E240000000000000000000000000000000001"
+	PortalRegistry   = "0x121E240000000000000000000000000000000002"
+	EthStakeInbox    = "0x121E240000000000000000000000000000000003"
+	OmniBridgeNative = "0x121E240000000000000000000000000000000004"
 
 	// Octane Predeploys.
 	Staking  = "0xcccccc0000000000000000000000000000000001"
@@ -54,6 +53,7 @@ var (
 	portalRegistry = common.HexToAddress(PortalRegistry)
 	staking        = common.HexToAddress(Staking)
 	slashing       = common.HexToAddress(Slashing)
+	omniBridge     = common.HexToAddress(OmniBridgeNative)
 
 	// Predeploy bytecodes.
 	proxyCode          = hexutil.MustDecode(bindings.TransparentUpgradeableProxyDeployedBytecode)
@@ -62,20 +62,16 @@ var (
 	portalRegistryCode = hexutil.MustDecode(bindings.PortalRegistryDeployedBytecode)
 	stakingCode        = hexutil.MustDecode(bindings.StakingDeployedBytecode)
 	slashingCode       = hexutil.MustDecode(bindings.SlashingDeployedBytecode)
+	omniBridgeCode     = hexutil.MustDecode(bindings.OmniBridgeNativeDeployedBytecode)
 )
 
 // Alloc returns the genesis allocs for the predeployed contracts, initializing code and storage.
-func Alloc(network netconf.ID) (types.GenesisAlloc, error) {
+func Alloc(admin common.Address) (types.GenesisAlloc, error) {
 	emptyGenesis := &core.Genesis{Alloc: types.GenesisAlloc{}}
 
 	db := state.NewMemDB(emptyGenesis)
 
 	setProxies(db)
-
-	admin, err := eoa.Admin(network)
-	if err != nil {
-		return nil, errors.Wrap(err, "network admin")
-	}
 
 	if err := setProxyAdmin(db, admin); err != nil {
 		return nil, errors.Wrap(err, "set proxy admin")
@@ -87,6 +83,10 @@ func Alloc(network netconf.ID) (types.GenesisAlloc, error) {
 
 	if err := setPortalRegistry(db, admin); err != nil {
 		return nil, errors.Wrap(err, "set portal registry")
+	}
+
+	if err := setOmniBridge(db, admin); err != nil {
+		return nil, errors.Wrap(err, "set omni bridge")
 	}
 
 	if err := setStaking(db); err != nil {
@@ -124,15 +124,34 @@ func setProxyAdmin(db *state.MemDB, owner common.Address) error {
 
 // setXRegistry sets the XRegistry predeploy.
 func setXRegistry(db *state.MemDB, owner common.Address) error {
-	storage := state.StorageValues{"_owner": owner}
+	storage := state.StorageValues{
+		"_initialized": uint8(1), // disable initializer
+		"_owner":       owner,
+	}
 
 	return setPredeploy(db, xRegistry, xRegistryCode, bindings.XRegistryStorageLayout, storage)
 }
 
 // setPortalRegistry sets the PortalRegistry predeploy.
 func setPortalRegistry(db *state.MemDB, owner common.Address) error {
-	storage := state.StorageValues{"_owner": owner}
+	storage := state.StorageValues{
+		"_initialized": uint8(1), // disable initializer
+		"_owner":       owner,
+	}
+
 	return setPredeploy(db, portalRegistry, portalRegistryCode, bindings.PortalRegistryStorageLayout, storage)
+}
+
+func setOmniBridge(db *state.MemDB, owner common.Address) error {
+	storage := state.StorageValues{
+		"_initialized": uint8(1), // disable initializer
+		"_owner":       owner,
+	}
+
+	// 100M total supply
+	db.SetBalance(omniBridge, new(big.Int).Mul(big.NewInt(100e6), big.NewInt(1e18)))
+
+	return setPredeploy(db, omniBridge, omniBridgeCode, bindings.OmniBridgeNativeStorageLayout, storage)
 }
 
 // setStaking sets the Staking predeploy.
@@ -153,6 +172,17 @@ func setSlashing(db *state.MemDB) error {
 func setPredeploy(db *state.MemDB, proxy common.Address, code []byte, layout solc.StorageLayout, storage state.StorageValues) error {
 	impl := impl(proxy)
 	setProxyImplementation(db, proxy, impl)
+
+	// disable impl initializers, if needed
+	if _, ok := solc.SlotOf(layout, "_initialized"); ok {
+		slot, err := state.EncodeStorageEntry(layout, "_initialized", uint8(255)) // max uint8, disables all initializers
+		if err != nil {
+			return errors.Wrap(err, "encode impl storage", "addr", impl)
+		}
+
+		db.SetState(impl, slot.Key, slot.Value)
+	}
+
 	db.SetCode(impl, code)
 
 	return setStrorage(db, proxy, layout, storage)

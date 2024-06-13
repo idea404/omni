@@ -3,22 +3,22 @@ package types
 import (
 	"crypto/ecdsa"
 	"encoding/hex"
+	"math/rand/v2"
 	"net"
 	"strings"
 	"sync/atomic"
 
 	"github.com/omni-network/omni/lib/evmchain"
 	"github.com/omni-network/omni/lib/netconf"
+	"github.com/omni-network/omni/lib/xchain"
 
 	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-
-	"math/rand/v2"
 )
 
-// Testnet wraps e2e.Testnet with additional omni-specific fields.
+// Testnet wraps e2e.Omega with additional omni-specific fields.
 type Testnet struct {
 	*e2e.Testnet
 	Network      netconf.ID
@@ -46,7 +46,7 @@ func (t Testnet) RandomHaloAddr() string {
 		return ""
 	}
 
-	return eligible[rand.IntN(len(eligible))]
+	return eligible[rand.IntN(len(eligible))] //nolint:gosec // Weak random used for deterministic tests.
 }
 
 // BroadcastOmniEVM returns a Omni EVM to use for e2e app tx broadcasts.
@@ -108,8 +108,17 @@ func (t Testnet) HasOmniEVM() bool {
 // EVMChain represents a EVM chain in a omni network.
 type EVMChain struct {
 	evmchain.Metadata
-	Shards   []uint64
+	Shards   []xchain.ShardID
 	IsPublic bool
+}
+
+func (c EVMChain) ShardsUint64() []uint64 {
+	var shards []uint64
+	for _, shard := range c.Shards {
+		shards = append(shards, uint64(shard))
+	}
+
+	return shards
 }
 
 // OmniEVM represents a omni evm instance in a omni network. Similar to e2e.Node for halo instances.

@@ -25,8 +25,8 @@ func newUint64(val uint64) *uint64 { return &val }
 
 // MakeGenesis returns a genesis block for a development chain.
 // See geth reference: https://github.com/ethereum/go-ethereum/blob/master/core/genesis.go#L564
-func MakeGenesis(network netconf.ID) (core.Genesis, error) {
-	predeps, err := predeploys.Alloc(network)
+func MakeGenesis(network netconf.ID, admin common.Address) (core.Genesis, error) {
+	predeps, err := predeploys.Alloc(admin)
 	if err != nil {
 		return core.Genesis{}, errors.Wrap(err, "predeploys")
 	}
@@ -35,7 +35,7 @@ func MakeGenesis(network netconf.ID) (core.Genesis, error) {
 
 	if network.IsEphemeral() {
 		allocs = mergeAllocs(allocs, stagingPrefundAlloc())
-	} else if network == netconf.Testnet {
+	} else if network == netconf.Omega {
 		allocs = mergeAllocs(allocs, testnetPrefundAlloc())
 	} else {
 		return core.Genesis{}, errors.New("unsupported network", "network", network.String())
@@ -76,7 +76,7 @@ func defaultChainConfig(network netconf.ID) *params.ChainConfig {
 }
 
 // precompilesAlloc returns allocs for precompiled contracts
-// TODO: this matches go-ethereum's precompiles, but we should understand why balances are set to 1.
+// precompile balances are set to 1 as a performance optimization, as done in geth.
 func precompilesAlloc() types.GenesisAlloc {
 	return types.GenesisAlloc{
 		common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
@@ -131,8 +131,8 @@ func testnetPrefundAlloc() types.GenesisAlloc {
 		common.HexToAddress("0xfE921e06Ed0a22c035b4aCFF0A5D3a434A330c96"): {Balance: eth1k}, // dev: relayer
 
 		// Relayer and Monitor EOAs
-		eoa.MustAddress(netconf.Testnet, eoa.RoleMonitor): {Balance: eth1m},
-		eoa.MustAddress(netconf.Testnet, eoa.RoleRelayer): {Balance: eth1m},
+		eoa.MustAddress(netconf.Omega, eoa.RoleMonitor): {Balance: eth1m},
+		eoa.MustAddress(netconf.Omega, eoa.RoleRelayer): {Balance: eth1m},
 
 		// team dev accounts
 		common.HexToAddress("0x00000d4De727593D6fbbFe39eE9EbddB49ED5b8A"): {Balance: eth1m}, // shared

@@ -36,6 +36,7 @@ jobs:
           context: "{{defaultContext}}:explorer/ui"
           push: true
           tags: omniops/explorer-ui:main,omniops/explorer-ui:${{ steps.git_ref.outputs.short_sha }}
+          platforms: linux/amd64 # Only build for linux/amd64, node:21-slim unsupported for darwin
 
       - name: Push Explorer Graphql to Dockerhub
         run: |
@@ -62,7 +63,7 @@ jobs:
           docker push omniops/monitor:${GITHUB_SHA::7}
           docker push omniops/monitor:main
 
-      - name: Push Monitor to Dockerhub
+      - name: Push AnvilProxy to Dockerhub
         run: |
           docker push omniops/anvilproxy:${GITHUB_SHA::7}
           docker push omniops/anvilproxy:main

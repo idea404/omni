@@ -30,8 +30,6 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-const omniConsensus = "omni_consensus"
-
 // DefinitionConfig is the configuration required to create a full Definition.
 type DefinitionConfig struct {
 	AgentSecrets agent.Secrets
@@ -287,7 +285,7 @@ func NoNodesTestnet(manifest types.Manifest, infd types.InfrastructureData, cfg 
 	}, nil
 }
 
-// noNodesTestnet returns a bare minimum instance of *e2e.Testnet. It doesn't have any nodes or chain details setup.
+// noNodesTestnet returns a bare minimum instance of *e2e.Omega. It doesn't have any nodes or chain details setup.
 func noNodesTestnet(manifest e2e.Manifest, file string, ifd e2e.InfrastructureData) (*e2e.Testnet, error) {
 	dir := strings.TrimSuffix(file, filepath.Ext(file))
 
@@ -475,7 +473,7 @@ func internalEndpoints(def Definition, nodePrefix string) xchain.RPCEndpoints {
 	endpoints[omniEVM.Chain.Name] = omniEVM.InternalRPC
 
 	node := nodeByPrefix(def.Testnet, nodePrefix)
-	endpoints[omniConsensus] = node.AddressRPC()
+	endpoints[def.Testnet.Network.Static().OmniConsensusChain().Name] = node.AddressRPC()
 
 	// Add all anvil chains
 	for _, anvil := range def.Testnet.AnvilChains {
@@ -505,7 +503,7 @@ func externalEndpoints(def Definition) xchain.RPCEndpoints {
 	endpoints[omniEVM.Chain.Name] = omniEVM.ExternalRPC
 
 	// Add omni consensus chain
-	endpoints[omniConsensus] = def.Testnet.BroadcastNode().AddressRPC()
+	endpoints[def.Testnet.Network.Static().OmniConsensusChain().Name] = def.Testnet.BroadcastNode().AddressRPC()
 
 	// Add all anvil chains
 	for _, anvil := range def.Testnet.AnvilChains {
@@ -553,13 +551,7 @@ func networkFromDef(def Definition) netconf.Network {
 	})
 
 	// Add omni consensus chain
-	chains = append(chains, netconf.Chain{
-		ID:   def.Testnet.Network.Static().OmniConsensusChainIDUint64(),
-		Name: omniConsensus,
-		// No RPC URLs, since we are going to remove it from netconf in any case.
-		DeployHeight: 1,                         // Validator sets start at height 1, not 0.
-		BlockPeriod:  omniEVM.Chain.BlockPeriod, // Same block period as omniEVM
-	})
+	chains = append(chains, def.Testnet.Network.Static().OmniConsensusChain())
 
 	// Add all anvil chains
 	for _, anvil := range def.Testnet.AnvilChains {
@@ -572,12 +564,6 @@ func networkFromDef(def Definition) netconf.Network {
 			PortalAddress: depInfo[types.ContractPortal].Address,
 			DeployHeight:  depInfo[types.ContractPortal].Height,
 		})
-	}
-
-	for _, chain := range chains {
-		if netconf.IsOmniConsensus(def.Testnet.Network, chain.ID) {
-			continue
-		}
 	}
 
 	return netconf.Network{

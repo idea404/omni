@@ -12,6 +12,7 @@ import (
 	"github.com/omni-network/omni/e2e/app/key"
 	"github.com/omni-network/omni/e2e/manifests"
 	"github.com/omni-network/omni/e2e/types"
+	"github.com/omni-network/omni/lib/contracts"
 	"github.com/omni-network/omni/lib/k1util"
 	"github.com/omni-network/omni/lib/netconf"
 	"github.com/omni-network/omni/lib/tutil"
@@ -33,8 +34,8 @@ func TestGenConsSeeds(t *testing.T) {
 		manifestFunc func() []byte
 	}{
 		{
-			network:      netconf.Testnet,
-			manifestFunc: manifests.Testnet,
+			network:      netconf.Omega,
+			manifestFunc: manifests.Omega,
 		},
 	}
 	for _, test := range tests {
@@ -80,8 +81,8 @@ func TestGenExecutionSeeds(t *testing.T) {
 		manifestFunc func() []byte
 	}{
 		{
-			network:      netconf.Testnet,
-			manifestFunc: manifests.Testnet,
+			network:      netconf.Omega,
+			manifestFunc: manifests.Omega,
 		},
 	}
 	for _, test := range tests {
@@ -137,14 +138,14 @@ func sortedKeys[T any](m map[string]T) []string {
 func TestConsensusSeeds(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, netconf.Testnet.Static().ConsensusSeeds(), 2)
+	require.Empty(t, netconf.Omega.Static().ConsensusSeeds())
 }
 
 func TestExecutionSeeds(t *testing.T) {
 	t.Skip("testnet shutdown at the moment")
 	t.Parallel()
 
-	seeds := netconf.Testnet.Static().ExecutionSeeds()
+	seeds := netconf.Omega.Static().ExecutionSeeds()
 	require.Len(t, seeds, 2)
 	for _, seed := range seeds {
 		node, err := enode.ParseV4(seed)
@@ -162,8 +163,21 @@ func TestConfLevels(t *testing.T) {
 
 	// Latest finalization start results in 1 shard and 2 conf levels.
 	chain := netconf.Chain{
-		Shards: []uint64{netconf.ShardLatest0},
+		Shards: []xchain.ShardID{xchain.ShardLatest0},
 	}
 	require.Len(t, chain.ConfLevels(), 2)
-	require.EqualValues(t, chain.ConfLevels(), []xchain.ConfLevel{xchain.ConfLatest, xchain.ConfFinalized})
+	require.EqualValues(t, []xchain.ConfLevel{xchain.ConfLatest, xchain.ConfFinalized}, chain.ConfLevels())
+}
+
+func TestAddrs(t *testing.T) {
+	t.Parallel()
+
+	// test that hardcoded address in netconf match lib/contract addresses
+
+	for _, deployment := range netconf.Omega.Static().Portals {
+		require.Equal(t, contracts.TestnetPortal(), deployment.Address)
+	}
+
+	// require.Equal(t, contracts.TestnetAVS(), netconf.Omega.Static().AVSContractAddress)
+	require.Equal(t, contracts.MainnetAVS(), netconf.Mainnet.Static().AVSContractAddress)
 }

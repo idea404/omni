@@ -4,11 +4,12 @@ import (
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/evmchain"
 	"github.com/omni-network/omni/lib/netconf"
+	"github.com/omni-network/omni/lib/xchain"
 )
 
 //nolint:gochecknoglobals // Static mappings
 var (
-	allShards = []uint64{netconf.ShardFinalized0, netconf.ShardLatest0} // All EVM chains support both finalized and latest shards.
+	allShards = []xchain.ShardID{xchain.ShardFinalized0, xchain.ShardLatest0} // All EVM chains support both finalized and latest shards.
 
 	chainEthereum = EVMChain{
 		Metadata: mustMetadata(evmchain.IDEthereum),
@@ -37,9 +38,14 @@ var (
 
 // OmniEVMByNetwork returns the Omni evm chain definition by netconf network.
 func OmniEVMByNetwork(network netconf.ID) EVMChain {
+	shards := []xchain.ShardID{xchain.ShardFinalized0} // OmniEVM has instant finality, so Latest == Finalized.
+	if network.IsEphemeral() {
+		shards = allShards // Enable all shards for testing.
+	}
+
 	return EVMChain{
 		Metadata: mustMetadata(network.Static().OmniExecutionChainID),
-		Shards:   allShards,
+		Shards:   shards,
 	}
 }
 

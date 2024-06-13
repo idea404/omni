@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/omni-network/omni/contracts/bindings"
+	"github.com/omni-network/omni/halo/genutil/evm/predeploys"
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/k1util"
 	"github.com/omni-network/omni/lib/log"
+	"github.com/omni-network/omni/lib/netconf"
 
 	"github.com/cometbft/cometbft/crypto"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -34,7 +37,10 @@ type payloadArgs struct {
 }
 
 //nolint:gochecknoglobals // This is a static mapping.
-var delegateEvent = mustGetABI(bindings.StakingMetaData).Events["Delegate"]
+var (
+	delegateEvent  = mustGetABI(bindings.StakingMetaData).Events["Delegate"]
+	portalRegEvent = mustGetABI(bindings.PortalRegistryMetaData).Events["PortalRegistered"]
+)
 
 var _ EngineClient = (*engineMock)(nil)
 
@@ -46,7 +52,7 @@ type engineMock struct {
 
 	mu          sync.Mutex
 	head        *types.Block
-	pendingLogs []types.Log
+	pendingLogs map[common.Address][]types.Log
 	logs        map[common.Hash][]types.Log
 	payloads    map[engine.PayloadID]payloadArgs
 }
@@ -59,7 +65,7 @@ func WithMockSelfDelegation(pubkey crypto.PubKey, ether int64) func(*engineMock)
 
 		wei := new(big.Int).Mul(big.NewInt(ether), big.NewInt(params.Ether))
 
-		addr, err := k1util.PubKeyToAddress(pubkey)
+		valAddr, err := k1util.PubKeyToAddress(pubkey)
 		if err != nil {
 			panic(errors.Wrap(err, "pubkey to address"))
 		}
@@ -69,16 +75,49 @@ func WithMockSelfDelegation(pubkey crypto.PubKey, ether int64) func(*engineMock)
 			panic(errors.Wrap(err, "pack delegate"))
 		}
 
-		mock.pendingLogs = append(mock.pendingLogs, types.Log{
-			// Staking predeploy addr, copied here to avoid import cycle.
-			Address: common.HexToAddress("0xcccccc0000000000000000000000000000000001"),
+		contractAddr := common.HexToAddress(predeploys.Staking)
+		eventLog := types.Log{
+			Address: contractAddr,
 			Topics: []common.Hash{
 				delegateEvent.ID,
-				common.HexToHash(addr.Hex()), // delegator
-				common.HexToHash(addr.Hex()), // validator
+				common.HexToHash(valAddr.Hex()), // delegator
+				common.HexToHash(valAddr.Hex()), // validator
 			},
 			Data: data,
-		})
+		}
+
+		mock.pendingLogs[contractAddr] = []types.Log{eventLog}
+	}
+}
+
+func WithPortalRegister(network netconf.Network) func(*engineMock) {
+	return func(mock *engineMock) {
+		mock.mu.Lock()
+		defer mock.mu.Unlock()
+
+		contractAddr := common.HexToAddress(predeploys.PortalRegistry)
+
+		var eventLogs []types.Log
+		for _, chain := range network.EVMChains() {
+			data, err := portalRegEvent.Inputs.NonIndexed().Pack(chain.DeployHeight, chain.Shards)
+			if err != nil {
+				panic(errors.Wrap(err, "pack delegate"))
+			}
+
+			eventLog := types.Log{
+				Address: contractAddr,
+				Topics: []common.Hash{
+					portalRegEvent.ID,
+					common.BytesToHash(math.U256Bytes(big.NewInt(int64(chain.ID)))), // ChainID
+					common.BytesToHash(chain.PortalAddress.Bytes()),                 // Address
+				},
+				Data: data,
+			}
+
+			eventLogs = append(eventLogs, eventLog)
+		}
+
+		mock.pendingLogs[contractAddr] = eventLogs
 	}
 }
 
@@ -120,10 +159,11 @@ func NewEngineMock(opts ...func(mock *engineMock)) (EngineClient, error) {
 	}
 
 	m := &engineMock{
-		fuzzer:   fuzzer,
-		head:     genesisBlock,
-		payloads: make(map[engine.PayloadID]payloadArgs),
-		logs:     make(map[common.Hash][]types.Log),
+		fuzzer:      fuzzer,
+		head:        genesisBlock,
+		pendingLogs: make(map[common.Address][]types.Log),
+		payloads:    make(map[engine.PayloadID]payloadArgs),
+		logs:        make(map[common.Hash][]types.Log),
 	}
 
 	for _, opt := range opts {
@@ -146,35 +186,36 @@ func (m *engineMock) maybeErr(ctx context.Context) error {
 }
 
 func (m *engineMock) FilterLogs(_ context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
-	// Assume all filter queries with addresses are for deposit events... :/
-	if len(q.Addresses) > 0 && q.BlockHash != nil {
-		m.mu.Lock()
-		defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-		if logs, ok := m.logs[*q.BlockHash]; ok { // Ensure we returns the same logs for the same query.
-			return logs, nil
+	if q.BlockHash == nil || len(q.Addresses) == 0 {
+		return nil, nil
+	}
+
+	addr := q.Addresses[0]
+
+	// Ensure we returns the same logs for the same query.
+	if eventLogs, ok := m.logs[*q.BlockHash]; ok {
+		var resp []types.Log
+		for _, eventLog := range eventLogs {
+			if eventLog.Address == addr {
+				resp = append(resp, eventLog)
+			}
 		}
-		if len(m.pendingLogs) == 0 {
-			return nil, nil
-		}
-
-		next := m.pendingLogs[0]
-		next.Address = q.Addresses[0]
-		m.pendingLogs = m.pendingLogs[1:]
-
-		resp := []types.Log{next}
-		m.logs[*q.BlockHash] = resp
 
 		return resp, nil
 	}
 
-	// If no addresses are provided, we return two random logs
-	f := fuzz.NewWithSeed(int64(q.BlockHash[0])).NilChance(0).NumElements(1, 4)
-	var resp1, resp2 types.Log
-	f.Fuzz(&resp1)
-	f.Fuzz(&resp2)
+	eventLogs, ok := m.pendingLogs[addr]
+	if !ok {
+		return nil, nil
+	}
 
-	return []types.Log{resp1, resp2}, nil
+	m.logs[*q.BlockHash] = eventLogs
+	delete(m.pendingLogs, addr)
+
+	return eventLogs, nil
 }
 
 func (m *engineMock) BlockNumber(ctx context.Context) (uint64, error) {

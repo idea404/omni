@@ -14,11 +14,12 @@ import (
 //
 
 func MainnetAVS() common.Address {
-	return create3.Address(MainnetCreate3Factory(), AVSSalt(netconf.Mainnet), eoa.MustAddress(netconf.Mainnet, eoa.RoleDeployer))
+	// This mainnet AVS was deployed outside of the e2e deployment flow, without Create3.
+	return common.HexToAddress("0xed2f4d90b073128ae6769a9A8D51547B1Df766C8")
 }
 
 func TestnetAVS() common.Address {
-	return create3.Address(TestnetCreate3Factory(), AVSSalt(netconf.Testnet), eoa.MustAddress(netconf.Testnet, eoa.RoleDeployer))
+	return create3.Address(TestnetCreate3Factory(), AVSSalt(netconf.Omega), eoa.MustAddress(netconf.Omega, eoa.RoleDeployer))
 }
 
 func StagingAVS() common.Address {
@@ -38,7 +39,7 @@ func MainnetCreate3Factory() common.Address {
 }
 
 func TestnetCreate3Factory() common.Address {
-	return crypto.CreateAddress(eoa.MustAddress(netconf.Testnet, eoa.RoleCreate3Deployer), 0)
+	return crypto.CreateAddress(eoa.MustAddress(netconf.Omega, eoa.RoleCreate3Deployer), 0)
 }
 
 func StagingCreate3Factory() common.Address {
@@ -58,7 +59,7 @@ func MainnetPortal() common.Address {
 }
 
 func TestnetPortal() common.Address {
-	return create3.Address(TestnetCreate3Factory(), PortalSalt(netconf.Testnet), eoa.MustAddress(netconf.Testnet, eoa.RoleDeployer))
+	return create3.Address(TestnetCreate3Factory(), PortalSalt(netconf.Omega), eoa.MustAddress(netconf.Omega, eoa.RoleDeployer))
 }
 
 func StagingPortal() common.Address {
@@ -67,6 +68,21 @@ func StagingPortal() common.Address {
 
 func DevnetPortal() common.Address {
 	return create3.Address(DevnetCreate3Factory(), PortalSalt(netconf.Devnet), eoa.MustAddress(netconf.Devnet, eoa.RoleDeployer))
+}
+
+func Portal(network netconf.ID) (common.Address, bool) {
+	switch network {
+	case netconf.Mainnet:
+		return MainnetPortal(), true
+	case netconf.Omega:
+		return TestnetPortal(), true
+	case netconf.Staging:
+		return StagingPortal(), true
+	case netconf.Devnet:
+		return DevnetPortal(), true
+	default:
+		return common.Address{}, false
+	}
 }
 
 //
@@ -78,7 +94,7 @@ func MainnetProxyAdmin() common.Address {
 }
 
 func TestnetProxyAdmin() common.Address {
-	return create3.Address(TestnetCreate3Factory(), ProxyAdminSalt(netconf.Testnet), eoa.MustAddress(netconf.Testnet, eoa.RoleDeployer))
+	return create3.Address(TestnetCreate3Factory(), ProxyAdminSalt(netconf.Omega), eoa.MustAddress(netconf.Omega, eoa.RoleDeployer))
 }
 
 func StagingProxyAdmin() common.Address {
@@ -87,6 +103,54 @@ func StagingProxyAdmin() common.Address {
 
 func DevnetProxyAdmin() common.Address {
 	return create3.Address(DevnetCreate3Factory(), ProxyAdminSalt(netconf.Devnet), eoa.MustAddress(netconf.Devnet, eoa.RoleDeployer))
+}
+
+//
+// L1Bridge.
+//
+// We use create3 deployments so we can have predictable addresses in ephemeral networks.
+
+func StagingL1Bridge() common.Address {
+	return create3.Address(StagingCreate3Factory(), L1BridgeSalt(netconf.Staging), eoa.MustAddress(netconf.Staging, eoa.RoleDeployer))
+}
+
+func DevnetL1Bridge() common.Address {
+	return create3.Address(DevnetCreate3Factory(), L1BridgeSalt(netconf.Devnet), eoa.MustAddress(netconf.Devnet, eoa.RoleDeployer))
+}
+
+func L1Bridge(network netconf.ID) (common.Address, bool) {
+	switch network {
+	case netconf.Staging:
+		return StagingL1Bridge(), true
+	case netconf.Devnet:
+		return DevnetL1Bridge(), true
+	default:
+		return common.Address{}, false
+	}
+}
+
+//
+// Token.
+//
+// We use create3 deployments so we can have predictable addresses in ephemeral networks.
+
+func StagingToken() common.Address {
+	return create3.Address(StagingCreate3Factory(), TokenSalt(netconf.Staging), eoa.MustAddress(netconf.Staging, eoa.RoleDeployer))
+}
+
+func DevnetToken() common.Address {
+	return create3.Address(DevnetCreate3Factory(), TokenSalt(netconf.Devnet), eoa.MustAddress(netconf.Devnet, eoa.RoleDeployer))
+}
+
+func Token(network netconf.ID) (common.Address, bool) {
+	switch network {
+	case netconf.Staging:
+		return StagingToken(), true
+	case netconf.Devnet:
+		return DevnetToken(), true
+	default:
+		return common.Address{}, false
+	}
 }
 
 //
@@ -104,6 +168,14 @@ func PortalSalt(network netconf.ID) string {
 
 func AVSSalt(network netconf.ID) string {
 	return salt(network, "avs")
+}
+
+func L1BridgeSalt(network netconf.ID) string {
+	return salt(network, "l1-bridge")
+}
+
+func TokenSalt(network netconf.ID) string {
+	return salt(network, "token")
 }
 
 //

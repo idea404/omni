@@ -24,15 +24,19 @@ type DeploymentConfig struct {
 	ExpectedAddr   common.Address
 }
 
+func isDeadOrEmpty(addr common.Address) bool {
+	return addr == common.Address{} || addr == common.HexToAddress(eoa.ZeroXDead)
+}
+
 func (cfg DeploymentConfig) Validate() error {
 	if (cfg.Create3Factory == common.Address{}) {
 		return errors.New("create3 factory is zero")
 	}
-	if (cfg.Owner == common.Address{}) {
-		return errors.New("owner is zero")
+	if isDeadOrEmpty(cfg.Owner) {
+		return errors.New("owner is not set")
 	}
-	if (cfg.Deployer == common.Address{}) {
-		return errors.New("deployer is zero")
+	if isDeadOrEmpty(cfg.Deployer) {
+		return errors.New("deployer is not set")
 	}
 
 	return nil
@@ -47,7 +51,7 @@ func getDeployCfg(chainID uint64, network netconf.ID) (DeploymentConfig, error) 
 		return mainnetCfg(), nil
 	}
 
-	if network == netconf.Testnet {
+	if network == netconf.Omega {
 		return testnetCfg(), nil
 	}
 
@@ -71,9 +75,9 @@ func mainnetCfg() DeploymentConfig {
 func testnetCfg() DeploymentConfig {
 	return DeploymentConfig{
 		Create3Factory: contracts.TestnetCreate3Factory(),
-		Create3Salt:    contracts.ProxyAdminSalt(netconf.Testnet),
-		Owner:          eoa.MustAddress(netconf.Testnet, eoa.RoleProxyAdminOwner),
-		Deployer:       eoa.MustAddress(netconf.Testnet, eoa.RoleDeployer),
+		Create3Salt:    contracts.ProxyAdminSalt(netconf.Omega),
+		Owner:          eoa.MustAddress(netconf.Omega, eoa.RoleProxyAdminOwner),
+		Deployer:       eoa.MustAddress(netconf.Omega, eoa.RoleDeployer),
 		ExpectedAddr:   contracts.TestnetProxyAdmin(),
 	}
 }
@@ -102,7 +106,7 @@ func AddrForNetwork(network netconf.ID) (common.Address, bool) {
 	switch network {
 	case netconf.Mainnet:
 		return contracts.MainnetProxyAdmin(), true
-	case netconf.Testnet:
+	case netconf.Omega:
 		return contracts.TestnetProxyAdmin(), true
 	case netconf.Staging:
 		return contracts.StagingProxyAdmin(), true
