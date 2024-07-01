@@ -161,7 +161,7 @@ func TestKeeper_Add(t *testing.T) {
 				msg: defaultMsg().
 					WithVotes(
 						defaultAggVote().
-							WithAttestationRoot([]byte("different root")).
+							WithMsgRoot(common.BytesToHash([]byte("different root"))).
 							Vote(),
 					).Msg(),
 			},
@@ -180,7 +180,7 @@ func TestKeeper_Add(t *testing.T) {
 					update(
 						expectPendingAtt(2, defaultOffset),
 						func(att *keeper.Attestation) {
-							att.AttestationRoot = []byte("different root")
+							att.MsgRoot = common.BytesToHash([]byte("different root")).Bytes()
 						},
 					),
 				},
@@ -290,7 +290,7 @@ func TestKeeper_Approve(t *testing.T) {
 			},
 			want: want{
 				atts: []*keeper.Attestation{
-					expectApprovedAtt(1, defaultOffset, valset1_2),
+					expectApprovedAtt(1, defaultOffset, valset1_2, 1),
 				},
 				sigs: []*keeper.Signature{
 					expectValSig(1, 1, val1),
@@ -338,7 +338,9 @@ func TestKeeper_Approve(t *testing.T) {
 					require.NoError(t, err)
 
 					// add sig from val3
-					sig := &keeper.Signature{AttId: 1, Signature: val3.Address, ValidatorAddress: val3.Address}
+					ethAddr, err := val3.EthereumAddress()
+					require.NoError(t, err)
+					sig := &keeper.Signature{AttId: 1, Signature: ethAddr.Bytes(), ValidatorAddress: ethAddr.Bytes()}
 					err = k.SignatureTable().Insert(ctx, sig)
 					require.NoError(t, err)
 				},
@@ -348,7 +350,7 @@ func TestKeeper_Approve(t *testing.T) {
 			},
 			want: want{
 				atts: []*keeper.Attestation{
-					expectApprovedAtt(1, defaultOffset, valset2_3),
+					expectApprovedAtt(1, defaultOffset, valset2_3, 1),
 				},
 				sigs: []*keeper.Signature{
 					expectValSig(2, 1, val2),
@@ -381,8 +383,8 @@ func TestKeeper_Approve(t *testing.T) {
 			},
 			want: want{
 				atts: []*keeper.Attestation{
-					expectApprovedAtt(1, defaultOffset, valset1_2),
-					expectApprovedAtt(2, defaultOffset+1, valset1_2),
+					expectApprovedAtt(1, defaultOffset, valset1_2, 1),
+					expectApprovedAtt(2, defaultOffset+1, valset1_2, 1),
 				},
 				sigs: []*keeper.Signature{
 					expectValSig(1, 1, val1),
@@ -417,7 +419,7 @@ func TestKeeper_Approve(t *testing.T) {
 			},
 			want: want{
 				atts: []*keeper.Attestation{
-					expectApprovedAtt(1, defaultOffset, valset1_2),
+					expectApprovedAtt(1, defaultOffset, valset1_2, 1),
 					expectPendingAtt(2, defaultOffset+2),
 				},
 				sigs: []*keeper.Signature{
@@ -425,6 +427,67 @@ func TestKeeper_Approve(t *testing.T) {
 					expectValSig(2, 1, val2),
 					expectValSig(3, 2, val1),
 					expectValSig(4, 2, val2),
+				},
+			},
+		},
+		{
+			name: "delete_old_attestations",
+			expectations: []expectation{
+				namerCalled(1),
+				defaultExpectations,
+				activeSetQueried(9),
+				activeSetQueried(10),
+				activeSetQueried(17),
+				activeSetQueried(18),
+				trimBehindCalled(1),
+			},
+			prerequisites: []prerequisite{
+				func(t *testing.T, k *keeper.Keeper, ctx sdk.Context) {
+					t.Helper()
+
+					initHeight := int64(10)
+					vote1 := defaultAggVote().WithBlockOffset(defaultOffset).Vote()
+					msg1 := defaultMsg().Default().WithVotes(vote1).Msg()
+					err := k.Add(ctx.WithBlockHeight(initHeight), msg1)
+					require.NoError(t, err)
+
+					vote2 := defaultAggVote().WithBlockOffset(defaultOffset + 1).Vote()
+					msg2 := defaultMsg().Default().WithVotes(vote2).Msg()
+					err = k.Add(ctx.WithBlockHeight(initHeight+1), msg2)
+					require.NoError(t, err)
+
+					vote3 := defaultAggVote().WithBlockOffset(defaultOffset + 2).Vote()
+					msg3 := defaultMsg().Default().WithVotes(vote3).Msg()
+					err = k.Add(ctx.WithBlockHeight(initHeight+8), msg3)
+					require.NoError(t, err)
+
+					vote4 := defaultAggVote().WithBlockOffset(defaultOffset + 3).Vote()
+					msg4 := defaultMsg().Default().WithVotes(vote4).Msg()
+					err = k.Add(ctx.WithBlockHeight(initHeight+9), msg4)
+					require.NoError(t, err)
+
+					// Approve all four attestations so they're no longer pending
+					err = k.Approve(ctx, toValSet(valset1_2))
+					require.NoError(t, err)
+
+					// Begin the block at height 20, which should cause the first 2 attestations to be deleted, but not the third and fourth
+					err = k.BeginBlock(ctx.WithBlockHeight(initHeight + 10))
+					require.NoError(t, err)
+				},
+			},
+			args: args{
+				valset: valset1_2,
+			},
+			want: want{
+				atts: []*keeper.Attestation{
+					expectApprovedAtt(3, defaultOffset+2, valset1_2, 18),
+					expectApprovedAtt(4, defaultOffset+3, valset1_2, 19),
+				},
+				sigs: []*keeper.Signature{
+					expectValSig(5, 3, val1),
+					expectValSig(6, 3, val2),
+					expectValSig(7, 4, val1),
+					expectValSig(8, 4, val2),
 				},
 			},
 		},
@@ -466,7 +529,8 @@ func toValSet(valset *vtypes.ValidatorSetResponse) keeper.ValSet {
 
 	vals := make(map[common.Address]int64)
 	for _, v := range valset.Validators {
-		vals[common.BytesToAddress(v.Address)] = v.Power
+		ethAddr, _ := v.EthereumAddress()
+		vals[ethAddr] = v.Power
 	}
 
 	return keeper.ValSet{
@@ -476,33 +540,34 @@ func toValSet(valset *vtypes.ValidatorSetResponse) keeper.ValSet {
 }
 
 func expectValSig(id uint64, attID uint64, val *vtypes.Validator) *keeper.Signature {
-	return &keeper.Signature{Id: id, AttId: attID, Signature: val.Address, ValidatorAddress: val.Address}
+	ethAddr, _ := val.EthereumAddress()
+	return &keeper.Signature{Id: id, AttId: attID, Signature: ethAddr.Bytes(), ValidatorAddress: ethAddr.Bytes()}
 }
 
 func expectPendingAtt(id uint64, offset uint64) *keeper.Attestation {
 	return &keeper.Attestation{
-		Id:              id,
-		AttestationRoot: attRoot,
-		ChainId:         1,
-		BlockHash:       blockHashes[0].Bytes(),
-		BlockOffset:     offset,
-		BlockHeight:     defaultHeight,
-		CreatedHeight:   1,
-		Status:          uint32(keeper.Status_Pending),
+		Id:            id,
+		MsgRoot:       msgRoot.Bytes(),
+		ChainId:       1,
+		BlockHash:     blockHashes[0].Bytes(),
+		BlockOffset:   offset,
+		BlockHeight:   defaultHeight,
+		CreatedHeight: 1,
+		Status:        uint32(keeper.Status_Pending),
 	}
 }
 
-func expectApprovedAtt(id uint64, offset uint64, valset *vtypes.ValidatorSetResponse) *keeper.Attestation {
+func expectApprovedAtt(id uint64, offset uint64, valset *vtypes.ValidatorSetResponse, createdHeight uint64) *keeper.Attestation {
 	return &keeper.Attestation{
-		Id:              id,
-		AttestationRoot: attRoot,
-		ChainId:         1,
-		BlockHash:       blockHashes[0].Bytes(),
-		BlockOffset:     offset,
-		BlockHeight:     defaultHeight,
-		CreatedHeight:   1,
-		Status:          uint32(keeper.Status_Approved),
-		ValidatorSetId:  valset.Id,
+		Id:             id,
+		MsgRoot:        msgRoot.Bytes(),
+		ChainId:        1,
+		BlockHash:      blockHashes[0].Bytes(),
+		BlockOffset:    offset,
+		BlockHeight:    defaultHeight,
+		CreatedHeight:  createdHeight,
+		Status:         uint32(keeper.Status_Approved),
+		ValidatorSetId: valset.Id,
 	}
 }
 
@@ -515,8 +580,8 @@ func update[T any](t T, fn func(T)) T {
 func populateKeyHashes(atts []*keeper.Attestation) []*keeper.Attestation {
 	for i := range atts {
 		a := keeper.AttestationFromDB(atts[i], nil)
-		key := a.UniqueKey()
-		atts[i].KeyHash = key[:]
+		attRoot, _ := a.AttestationRoot()
+		atts[i].AttestationRoot = attRoot[:]
 	}
 
 	return atts

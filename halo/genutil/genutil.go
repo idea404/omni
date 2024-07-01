@@ -6,14 +6,16 @@ import (
 	"time"
 
 	attesttypes "github.com/omni-network/omni/halo/attest/types"
-	etypes "github.com/omni-network/omni/halo/evmengine/types"
 	vtypes "github.com/omni-network/omni/halo/valsync/types"
 	"github.com/omni-network/omni/lib/buildinfo"
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/k1util"
 	"github.com/omni-network/omni/lib/netconf"
+	etypes "github.com/omni-network/omni/octane/evmengine/types"
 
 	"github.com/cometbft/cometbft/crypto"
+
+	"github.com/ethereum/go-ethereum/common"
 
 	"cosmossdk.io/math"
 	"cosmossdk.io/x/tx/signing"
@@ -39,12 +41,21 @@ import (
 // since Omni block period (+-1s) is very fast, roughly 10x normal period of 10s.
 const slashingBlocksWindow = 1000
 
-func MakeGenesis(network netconf.ID, genesisTime time.Time, valPubkeys ...crypto.PubKey) (*gtypes.AppGenesis, error) {
+// validatorPower is the default power assigned to genesis validators.
+// It is also the minimum stake enforced by the omni staking contract.
+const validatorPower = 100
+
+func MakeGenesis(
+	network netconf.ID,
+	genesisTime time.Time,
+	executionBlockHash common.Hash,
+	valPubkeys ...crypto.PubKey,
+) (*gtypes.AppGenesis, error) {
 	cdc := getCodec()
 	txConfig := authtx.NewTxConfig(cdc, nil)
 
 	// Step 1: Create the default genesis app state for all modules.
-	appState1 := defaultAppState(network.Static().MaxValidators, cdc.MustMarshalJSON)
+	appState1 := defaultAppState(network.Static().MaxValidators, executionBlockHash, cdc.MustMarshalJSON)
 	appState1Bz, err := json.MarshalIndent(appState1, "", " ")
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal app state")
@@ -170,7 +181,7 @@ func addValidator(txConfig client.TxConfig, pubkey crypto.PubKey, cdc codec.Code
 	}
 
 	// Add validator with 1 power (1e18 $STAKE ~= 1 ether $STAKE)
-	amount := sdk.NewCoin(sdk.DefaultBondDenom, sdk.DefaultPowerReduction)
+	amount := sdk.NewCoin(sdk.DefaultBondDenom, sdk.DefaultPowerReduction.MulRaw(validatorPower))
 
 	err = genutil.AddGenesisAccount(cdc, addr.Bytes(), false, genFile, amount.String(), "", 0, 0, "")
 	if err != nil {
@@ -205,12 +216,18 @@ func addValidator(txConfig client.TxConfig, pubkey crypto.PubKey, cdc codec.Code
 }
 
 // defaultAppState returns the default genesis application state.
-func defaultAppState(maxVals uint32, marshal func(proto.Message) []byte) map[string]json.RawMessage {
+func defaultAppState(
+	maxVals uint32,
+	executionBlockHash common.Hash,
+	marshal func(proto.Message) []byte,
+) map[string]json.RawMessage {
 	stakingGenesis := sttypes.DefaultGenesisState()
 	stakingGenesis.Params.MaxValidators = maxVals
 
 	slashingGenesis := sltypes.DefaultGenesisState()
 	slashingGenesis.Params.SignedBlocksWindow = slashingBlocksWindow
+
+	evmengGenesis := etypes.NewGenesisState(executionBlockHash)
 
 	return map[string]json.RawMessage{
 		sttypes.ModuleName: marshal(stakingGenesis),
@@ -219,6 +236,7 @@ func defaultAppState(maxVals uint32, marshal func(proto.Message) []byte) map[str
 		btypes.ModuleName:  marshal(btypes.DefaultGenesisState()),
 		dtypes.ModuleName:  marshal(dtypes.DefaultGenesisState()),
 		vtypes.ModuleName:  marshal(vtypes.DefaultGenesisState()),
+		etypes.ModuleName:  marshal(evmengGenesis),
 	}
 }
 

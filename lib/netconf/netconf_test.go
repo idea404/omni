@@ -69,6 +69,8 @@ func TestGenConsSeeds(t *testing.T) {
 
 var genExecutionSeeds = flag.Bool("gen-execution-seeds", false, "Enable to generate execution-seeds.txt. Note this requires GCP secret manager read-access")
 
+//go:generate go test -golden -gen-execution-seeds -run=TestGenExecutionSeeds
+
 func TestGenExecutionSeeds(t *testing.T) {
 	t.Parallel()
 	if !*genExecutionSeeds {
@@ -175,9 +177,9 @@ func TestAddrs(t *testing.T) {
 	// test that hardcoded address in netconf match lib/contract addresses
 
 	for _, deployment := range netconf.Omega.Static().Portals {
-		require.Equal(t, contracts.TestnetPortal(), deployment.Address)
+		require.Equal(t, contracts.OmegaPortal(), deployment.Address)
 	}
 
-	// require.Equal(t, contracts.TestnetAVS(), netconf.Omega.Static().AVSContractAddress)
+	require.Equal(t, contracts.OmegaAVS(), netconf.Omega.Static().AVSContractAddress)
 	require.Equal(t, contracts.MainnetAVS(), netconf.Mainnet.Static().AVSContractAddress)
 }

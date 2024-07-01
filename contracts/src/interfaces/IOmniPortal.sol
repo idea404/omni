@@ -62,9 +62,19 @@ interface IOmniPortal {
     function xmsgMinGasLimit() external view returns (uint64);
 
     /**
+     * @notice Maximum number of bytes allowed in xmsg data
+     */
+    function xmsgMaxDataSize() external view returns (uint16);
+
+    /**
      * @notice Maxium number of bytes allowed in xreceipt result
      */
-    function xreceiptMaxErrorBytes() external view returns (uint16);
+    function xreceiptMaxErrorSize() external view returns (uint16);
+
+    /**
+     * @notice Returns the fee oracle address
+     */
+    function feeOracle() external view returns (address);
 
     /**
      * @notice Returns the chain ID of the chain to which this portal is deployed
@@ -105,6 +115,16 @@ interface IOmniPortal {
      * @notice Returns true the current transaction is an xcall, false otherwise
      */
     function isXCall() external view returns (bool);
+
+    /**
+     * @notice Returns the shard ID is supported by this portal
+     */
+    function isSupportedShard(uint64 shardId) external view returns (bool);
+
+    /**
+     * @notice Returns the destination chain ID is supported by this portal
+     */
+    function isSupportedDest(uint64 destChainId) external view returns (bool);
 
     /**
      * @notice Calculate the fee for calling a contract on another chain

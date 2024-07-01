@@ -17,10 +17,11 @@ import (
 
 const consensusIDPrefix = "omni-"
 const consensusIDOffset = 1_000_000
-const maxValidators = 10
+const maxValidators = 30
 
 // Static defines static config and data for a network.
 type Static struct {
+	Network              ID
 	Version              string
 	OmniExecutionChainID uint64
 	AVSContractAddress   common.Address
@@ -53,11 +54,12 @@ func (s Static) OmniConsensusChainIDUint64() uint64 {
 // OmniConsensusChain returns the omni consensus Chain struct.
 func (s Static) OmniConsensusChain() Chain {
 	return Chain{
-		ID:           s.OmniConsensusChainIDUint64(),
-		Name:         "omni_consensus",
-		BlockPeriod:  time.Second * 2,
-		Shards:       []xchain.ShardID{xchain.ShardBroadcast0}, // Consensus chain only supports broadcast shard.
-		DeployHeight: 1,                                        // Emit portal blocks start at 1, not 0.
+		ID:             s.OmniConsensusChainIDUint64(),
+		Name:           "omni_consensus",
+		BlockPeriod:    time.Second * 2,
+		Shards:         []xchain.ShardID{xchain.ShardBroadcast0}, // Consensus chain only supports broadcast shard.
+		DeployHeight:   1,                                        // Emit portal blocks start at 1, not 0.
+		AttestInterval: 0,                                        // Emit portal blocks are never empty, so this isn't required.
 	}
 }
 
@@ -95,6 +97,22 @@ func (s Static) ExecutionSeeds() []string {
 	return resp
 }
 
+func (s Static) ExecutionRPC() string {
+	if s.Network == Devnet {
+		return "http://localhost:8001"
+	}
+
+	return fmt.Sprintf("https://%s.omni.network", s.Network)
+}
+
+func (s Static) ConsensusRPC() string {
+	if s.Network == Devnet {
+		return "http://localhost:5701"
+	}
+
+	return fmt.Sprintf("https://consensus.%s.omni.network", s.Network)
+}
+
 // Use random runid for staging version.
 //
 //nolint:gochecknoglobals // Static ID
@@ -103,36 +121,40 @@ var runid = uuid.New().String()
 //nolint:gochecknoglobals // Static addresses
 var (
 	// Address matches lib/contracts. We do not import to avoid cylic dependencies. Equivalence asserted in tests.
-	// testnetPortal = common.HexToAddress("0xFf22F3532C19a6f890c52c4CfcDB94007aA471Dc").
-	testnetAVS = common.HexToAddress("0xa7b2e7830C51728832D33421670DbBE30299fD92")
+	omegaAVS   = common.HexToAddress("0xa7b2e7830C51728832D33421670DbBE30299fD92")
 	mainnetAVS = common.HexToAddress("0xed2f4d90b073128ae6769a9A8D51547B1Df766C8")
 )
 
 //nolint:gochecknoglobals // Static mappings.
 var statics = map[ID]Static{
 	Simnet: {
+		Network:              Simnet,
 		Version:              "simnet",
 		OmniExecutionChainID: evmchain.IDOmniEphemeral,
 		MaxValidators:        maxValidators,
 	},
 	Devnet: {
+		Network:              Devnet,
 		Version:              "devnet",
 		OmniExecutionChainID: evmchain.IDOmniEphemeral,
 		MaxValidators:        maxValidators,
 	},
 	Staging: {
+		Network:              Staging,
 		Version:              runid,
 		OmniExecutionChainID: evmchain.IDOmniEphemeral,
 		MaxValidators:        maxValidators,
 	},
 	Omega: {
-		Version:              "v0.0.2",
-		AVSContractAddress:   testnetAVS,
+		Network:              Omega,
+		Version:              "v0.0.6",
+		AVSContractAddress:   omegaAVS,
 		OmniExecutionChainID: evmchain.IDOmniOmega,
 		MaxValidators:        maxValidators,
 		Portals:              []Deployment{},
 	},
 	Mainnet: {
+		Network:            Mainnet,
 		Version:            "v0.0.1",
 		AVSContractAddress: mainnetAVS,
 		MaxValidators:      maxValidators,

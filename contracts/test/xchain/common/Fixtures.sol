@@ -10,14 +10,12 @@ import { ConfLevel } from "src/libraries/ConfLevel.sol";
 import { FeeOracleV1 } from "src/xchain/FeeOracleV1.sol";
 import { IFeeOracleV1 } from "src/interfaces/IFeeOracleV1.sol";
 import { OmniPortal } from "src/xchain/OmniPortal.sol";
-import { XRegistryReplica } from "src/xchain/XRegistryReplica.sol";
 import { TestXTypes } from "./TestXTypes.sol";
 import { PortalHarness } from "./PortalHarness.sol";
 import { Counter } from "./Counter.sol";
 import { Reverter } from "./Reverter.sol";
 import { GasGuzzler } from "./GasGuzzler.sol";
 import { XSubmitter } from "./XSubmitter.sol";
-import { MockXRegistryReplica } from "./MockXRegistryReplica.sol";
 
 import { CommonBase } from "forge-std/Base.sol";
 import { StdCheats } from "forge-std/StdCheats.sol";
@@ -59,7 +57,8 @@ contract Fixtures is CommonBase, StdCheats {
 
     uint64 xmsgMaxGasLimit = 5_000_000;
     uint64 xmsgMinGasLimit = 21_000;
-    uint64 xreceiptMaxErrorBytes = 256;
+    uint16 xmsgMaxDataSize = 20_000;
+    uint16 xreceiptMaxErrorSize = 256;
 
     string constant valMnemonic = "test test test test test test test test test test test junk";
 
@@ -77,10 +76,6 @@ contract Fixtures is CommonBase, StdCheats {
     uint256 val3PrivKey;
     uint256 val4PrivKey;
     uint256 val5PrivKey;
-
-    MockXRegistryReplica xregistry;
-    MockXRegistryReplica chainAXRegistry;
-    MockXRegistryReplica chainBXRegistry;
 
     ProxyAdmin proxyAdmin;
     ProxyAdmin chainAProxyAdmin;
@@ -453,18 +448,21 @@ contract Fixtures is CommonBase, StdCheats {
 
         feeParams[0] = IFeeOracleV1.ChainFeeParams({
             chainId: thisChainId,
+            postsTo: thisChainId,
             gasPrice: 0.1 gwei, // 1 gwei
             toNativeRate: 1e6 // feeOracle.CONVERSION_RATE_DENOM , so 1:1
          });
 
         feeParams[1] = IFeeOracleV1.ChainFeeParams({
             chainId: chainAId,
+            postsTo: chainAId,
             gasPrice: 0.1 gwei, // 1 gwei
             toNativeRate: 1e6 // feeOracle.CONVERSION_RATE_DENOM , so 1:1
          });
 
         feeParams[2] = IFeeOracleV1.ChainFeeParams({
             chainId: chainBId,
+            postsTo: chainAId, // let's have chainB "rollup" to chainA
             gasPrice: 0.1 gwei, // 1 gwei
             toNativeRate: 1e6 // feeOracle.CONVERSION_RATE_DENOM , so 1:1
          });
@@ -488,7 +486,6 @@ contract Fixtures is CommonBase, StdCheats {
                 )
             )
         );
-        xregistry = new MockXRegistryReplica();
         portalImpl = new PortalHarness();
         portal = PortalHarness(
             address(
@@ -497,16 +494,20 @@ contract Fixtures is CommonBase, StdCheats {
                     address(proxyAdmin),
                     abi.encodeWithSelector(
                         OmniPortal.initialize.selector,
-                        owner,
-                        address(feeOracle),
-                        address(xregistry),
-                        omniChainId,
-                        omniCChainID,
-                        xmsgMaxGasLimit,
-                        xmsgMinGasLimit,
-                        xreceiptMaxErrorBytes,
-                        genesisValSetId,
-                        validatorSet[genesisValSetId]
+                        OmniPortal.InitParams(
+                            owner,
+                            address(feeOracle),
+                            omniChainId,
+                            omniCChainID,
+                            xmsgMaxGasLimit,
+                            xmsgMinGasLimit,
+                            xmsgMaxDataSize,
+                            xreceiptMaxErrorSize,
+                            1, // cchain xmsg offset
+                            1, // cchain xblock offset
+                            genesisValSetId,
+                            validatorSet[genesisValSetId]
+                        )
                     )
                 )
             )
@@ -533,7 +534,6 @@ contract Fixtures is CommonBase, StdCheats {
                 )
             )
         );
-        chainAXRegistry = new MockXRegistryReplica();
         chainAPortalImpl = new PortalHarness();
         chainAPortal = PortalHarness(
             address(
@@ -542,16 +542,20 @@ contract Fixtures is CommonBase, StdCheats {
                     address(chainAProxyAdmin),
                     abi.encodeWithSelector(
                         OmniPortal.initialize.selector,
-                        owner,
-                        address(feeOracle),
-                        chainAXRegistry,
-                        omniChainId,
-                        omniCChainID,
-                        xmsgMaxGasLimit,
-                        xmsgMinGasLimit,
-                        xreceiptMaxErrorBytes,
-                        genesisValSetId,
-                        validatorSet[genesisValSetId]
+                        OmniPortal.InitParams(
+                            owner,
+                            address(feeOracle),
+                            omniChainId,
+                            omniCChainID,
+                            xmsgMaxGasLimit,
+                            xmsgMinGasLimit,
+                            xmsgMaxDataSize,
+                            xreceiptMaxErrorSize,
+                            1, // cchain xmsg offset
+                            1, // cchain xblock offset
+                            genesisValSetId,
+                            validatorSet[genesisValSetId]
+                        )
                     )
                 )
             )
@@ -578,7 +582,6 @@ contract Fixtures is CommonBase, StdCheats {
                 )
             )
         );
-        chainBXRegistry = new MockXRegistryReplica();
         chainBPortalImpl = new PortalHarness();
         chainBPortal = PortalHarness(
             address(
@@ -587,16 +590,20 @@ contract Fixtures is CommonBase, StdCheats {
                     address(chainBProxyAdmin),
                     abi.encodeWithSelector(
                         OmniPortal.initialize.selector,
-                        owner,
-                        address(feeOracle),
-                        address(chainBXRegistry),
-                        omniChainId,
-                        omniCChainID,
-                        xmsgMaxGasLimit,
-                        xmsgMinGasLimit,
-                        xreceiptMaxErrorBytes,
-                        genesisValSetId,
-                        validatorSet[genesisValSetId]
+                        OmniPortal.InitParams(
+                            owner,
+                            address(feeOracle),
+                            omniChainId,
+                            omniCChainID,
+                            xmsgMaxGasLimit,
+                            xmsgMinGasLimit,
+                            xmsgMaxDataSize,
+                            xreceiptMaxErrorSize,
+                            1, // cchain xmsg offset
+                            1, // cchain xblock offset
+                            genesisValSetId,
+                            validatorSet[genesisValSetId]
+                        )
                     )
                 )
             )
@@ -617,21 +624,24 @@ contract Fixtures is CommonBase, StdCheats {
         _reverters[chainAId] = address(chainAReverter);
         _reverters[chainBId] = address(chainBReverter);
 
-        // set portals in xregistry
+        XTypes.Chain[] memory network = new XTypes.Chain[](3);
+        network[0] = XTypes.Chain({ chainId: thisChainId, shards: new uint64[](2) });
+        network[1] = XTypes.Chain({ chainId: chainAId, shards: new uint64[](2) });
+        network[2] = XTypes.Chain({ chainId: chainBId, shards: new uint64[](2) });
+        network[0].shards[0] = ConfLevel.Finalized;
+        network[0].shards[1] = ConfLevel.Latest;
+        network[1].shards[0] = ConfLevel.Finalized;
+        network[1].shards[1] = ConfLevel.Latest;
+        network[2].shards[0] = ConfLevel.Finalized;
+        network[2].shards[1] = ConfLevel.Latest;
 
         vm.chainId(thisChainId);
-        xregistry.registerPortal(address(portal), thisChainId, address(portal));
-        xregistry.registerPortal(address(portal), chainAId, address(chainAPortal));
-        xregistry.registerPortal(address(portal), chainBId, address(chainBPortal));
+        portal.setNetworkNoAuth(network);
 
         vm.chainId(chainAId);
-        chainAXRegistry.registerPortal(address(chainAPortal), thisChainId, address(portal));
-        chainAXRegistry.registerPortal(address(chainAPortal), chainAId, address(chainAPortal));
-        chainAXRegistry.registerPortal(address(chainAPortal), chainBId, address(chainBPortal));
+        chainAPortal.setNetworkNoAuth(network);
 
         vm.chainId(chainBId);
-        chainBXRegistry.registerPortal(address(chainBPortal), thisChainId, address(portal));
-        chainBXRegistry.registerPortal(address(chainBPortal), chainAId, address(chainAPortal));
-        chainBXRegistry.registerPortal(address(chainBPortal), chainBId, address(chainBPortal));
+        chainBPortal.setNetworkNoAuth(network);
     }
 }

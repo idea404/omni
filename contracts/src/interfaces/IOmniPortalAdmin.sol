@@ -7,11 +7,10 @@ pragma solidity ^0.8.12;
  */
 interface IOmniPortalAdmin {
     /**
-     * @notice Emitted when the fee oracle is changed
-     * @param oldOracle  The old fee oracle
-     * @param newOrcale  The new fee oracle
+     * @notice Emitted when the fee oracle is updated.
+     * @param oracle  The new fee oracle address
      */
-    event FeeOracleChanged(address indexed oldOracle, address indexed newOrcale);
+    event FeeOracleSet(address oracle);
 
     /**
      * @notice Emited when fees are collected
@@ -21,30 +20,108 @@ interface IOmniPortalAdmin {
     event FeesCollected(address indexed to, uint256 amount);
 
     /**
-     * @notice Emitted when xmsgMinGasLimit is changed.
-     * @param oldMin The old xmsgMinGasLimit
-     * @param newMin The new xmsgMinGasLimit
+     * @notice Emitted when xmsgMinGasLimit is updated
+     * @param gasLimit The new xmsgMinGasLimit
      */
-    event XMsgMinGasLimitChanged(uint64 indexed oldMin, uint64 indexed newMin);
+    event XMsgMinGasLimitSet(uint64 gasLimit);
 
     /**
-     * @notice Emitted when xmsgMaxGasLimit is changed.
-     * @param oldMax The old xmsgMaxGasLimit
-     * @param newMax The new xmsgMaxGasLimit
+     * @notice Emitted when xmsgMaxGasLimit is updated
+     * @param gasLimit The new xmsgMaxGasLimit
      */
-    event XMsgMaxGasLimitChanged(uint64 indexed oldMax, uint64 indexed newMax);
+    event XMsgMaxGasLimitSet(uint64 gasLimit);
 
     /**
-     * @notice Emitted when xreceiptMaxErrorBytes is changed.
-     * @param oldMax The old xreceiptMaxErrorBytes
-     * @param newMax The new xreceiptMaxErrorBytes
+     * @notice Emitted when xmsgMaxDataSize is updated
+     * @param size The new max size
      */
-    event XReceiptMaxErrorBytesChanged(uint16 indexed oldMax, uint16 indexed newMax);
+    event XMsgMaxDataSizeSet(uint16 size);
 
     /**
-     * @notice Returns the current fee oracle address
+     * @notice Emitted when xreceiptMaxErrorSize is updated
+     * @param size The new max size
      */
-    function feeOracle() external view returns (address);
+    event XReceiptMaxErrorSizeSet(uint16 size);
+
+    /**
+     * @notice Emitted the portal is paused, all xcalls and xsubmissions
+     */
+    event Paused();
+
+    /**
+     * @notice Emitted the portal is unpaused, all xcalls and xsubmissions
+     */
+    event Unpaused();
+
+    /**
+     * @notice Emitted when all xcalls are paused
+     */
+    event XCallPaused();
+
+    /**
+     * @notice Emitted when inbound xmsg offset is updated
+     */
+    event InXMsgOffsetSet(uint64 indexed srcChainId, uint64 indexed shardId, uint64 offset);
+
+    /**
+     * @notice Emitted when all inbound xblock offset is updated
+     */
+    event InXBlockOffsetSet(uint64 indexed srcChainId, uint64 indexed shardId, uint64 offset);
+
+    /**
+     * @notice Emitted when all xcalls are unpaused
+     */
+    event XCallUnpaused();
+
+    /**
+     * @notice Emitted when all xsubmissions are paused
+     */
+    event XSubmitPaused();
+
+    /**
+     * @notice Emitted when all xsubmissions are unpaused
+     */
+    event XSubmitUnpaused();
+
+    /**
+     * @notice Emitted when xcalls to a specific chain are paused
+     * @param chainId   The destination chain
+     */
+    event XCallToPaused(uint64 indexed chainId);
+
+    /**
+     * @notice Emitted when xcalls to a specific chain are unpaused
+     * @param chainId   The destination chain
+     */
+    event XCallToUnpaused(uint64 indexed chainId);
+
+    /**
+     * @notice Emitted when xsubmissions from a specific chain are paused
+     * @param chainId    The source chain
+     */
+    event XSubmitFromPaused(uint64 indexed chainId);
+
+    /**
+     * @notice Emitted when xsubmissions from a specific chain are unpaused
+     * @param chainId    The source chain
+     */
+    event XSubmitFromUnpaused(uint64 indexed chainId);
+
+    /**
+     * @notice Set the inbound xmsg offset for a chain and shard
+     * @param sourceChainId    Source chain ID
+     * @param shardId          Shard ID
+     * @param offset           New xmsg offset
+     */
+    function setInXMsgOffset(uint64 sourceChainId, uint64 shardId, uint64 offset) external;
+
+    /**
+     * @notice Set the inbound xblock offset for a chain and shard
+     * @param sourceChainId    Source chain ID
+     * @param shardId          Shard ID
+     * @param offset           New xblock offset
+     */
+    function setInXBlockOffset(uint64 sourceChainId, uint64 shardId, uint64 offset) external;
 
     /**
      * @notice Set the fee oracle
@@ -68,9 +145,14 @@ interface IOmniPortalAdmin {
     function setXMsgMaxGasLimit(uint64 gasLimit) external;
 
     /**
+     * @notice Set the maximum data bytes for xmsg
+     */
+    function setXMsgMaxDataSize(uint16 numBytes) external;
+
+    /**
      * @notice Set the maximum error bytes for xreceipt
      */
-    function setXReceiptMaxErrorBytes(uint16 maxErrorBytes) external;
+    function setXReceiptMaxErrorSize(uint16 numBytes) external;
 
     /**
      * @notice Pause xcalls

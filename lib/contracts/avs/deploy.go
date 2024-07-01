@@ -96,7 +96,7 @@ func getDeployCfg(chainID uint64, network netconf.ID) (DeploymentConfig, error) 
 	}
 
 	if network == netconf.Omega {
-		return testnetCfg(), nil
+		return omegaCfg(), nil
 	}
 
 	if network == netconf.Staging {
@@ -106,23 +106,23 @@ func getDeployCfg(chainID uint64, network netconf.ID) (DeploymentConfig, error) 
 	return DeploymentConfig{}, errors.New("unsupported chain for network", "chain_id", chainID, "network", network)
 }
 
-func testnetCfg() DeploymentConfig {
+func omegaCfg() DeploymentConfig {
 	return DeploymentConfig{
-		Create3Factory:   contracts.TestnetCreate3Factory(),
+		Create3Factory:   contracts.OmegaCreate3Factory(),
 		Create3Salt:      contracts.AVSSalt(netconf.Omega),
 		Deployer:         eoa.MustAddress(netconf.Omega, eoa.RoleDeployer),
-		Owner:            eoa.MustAddress(netconf.Omega, eoa.RoleAVSAdmin),
-		ProxyAdmin:       contracts.TestnetProxyAdmin(),
+		Owner:            eoa.MustAddress(netconf.Omega, eoa.RoleAdmin),
+		ProxyAdmin:       contracts.OmegaProxyAdmin(),
 		Eigen:            holeskyEigenDeployments(),
 		StrategyParams:   holeskyStrategyParams(),
 		MetadataURI:      metadataURI,
 		OmniChainID:      netconf.Omega.Static().OmniExecutionChainID,
-		Portal:           contracts.TestnetPortal(),
+		Portal:           contracts.OmegaPortal(),
 		EthStakeInbox:    stubEthStakeInbox,
 		MinOperatorStake: big.NewInt(1e18), // 1 ETH
 		MaxOperatorCount: 200,
 		AllowlistEnabled: false,
-		ExpectedAddr:     contracts.TestnetAVS(),
+		ExpectedAddr:     contracts.OmegaAVS(),
 	}
 }
 
@@ -131,7 +131,7 @@ func stagingCfg() DeploymentConfig {
 		Create3Factory:   contracts.StagingCreate3Factory(),
 		Create3Salt:      contracts.AVSSalt(netconf.Staging),
 		Deployer:         eoa.MustAddress(netconf.Staging, eoa.RoleDeployer),
-		Owner:            eoa.MustAddress(netconf.Staging, eoa.RoleAVSAdmin),
+		Owner:            eoa.MustAddress(netconf.Staging, eoa.RoleAdmin),
 		ProxyAdmin:       contracts.StagingProxyAdmin(),
 		Eigen:            devnetEigenDeployments,
 		StrategyParams:   devnetStrategyParams(),
@@ -151,7 +151,7 @@ func devnetCfg() DeploymentConfig {
 		Create3Factory:   contracts.DevnetCreate3Factory(),
 		Create3Salt:      contracts.AVSSalt(netconf.Devnet),
 		Deployer:         eoa.MustAddress(netconf.Devnet, eoa.RoleDeployer),
-		Owner:            eoa.MustAddress(netconf.Devnet, eoa.RoleAVSAdmin),
+		Owner:            eoa.MustAddress(netconf.Devnet, eoa.RoleAdmin),
 		ProxyAdmin:       contracts.DevnetProxyAdmin(),
 		Eigen:            devnetEigenDeployments,
 		MetadataURI:      metadataURI,
@@ -171,7 +171,7 @@ func AddrForNetwork(network netconf.ID) (common.Address, bool) {
 	case netconf.Mainnet:
 		return contracts.MainnetAVS(), true
 	case netconf.Omega:
-		return contracts.TestnetAVS(), true
+		return contracts.OmegaAVS(), true
 	case netconf.Staging:
 		return contracts.StagingAVS(), true
 	case netconf.Devnet:

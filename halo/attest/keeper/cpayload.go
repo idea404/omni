@@ -6,10 +6,10 @@ import (
 	"sort"
 
 	"github.com/omni-network/omni/halo/attest/types"
-	evmenginetypes "github.com/omni-network/omni/halo/evmengine/types"
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/log"
 	"github.com/omni-network/omni/lib/xchain"
+	evmenginetypes "github.com/omni-network/omni/octane/evmengine/types"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -22,6 +22,11 @@ import (
 
 var _ evmenginetypes.VoteExtensionProvider = (*Keeper)(nil)
 
+// PrepareVotes returns the cosmosSDK transaction MsgAddVotes that will include all the validator votes included
+// in the previous block's vote extensions into the attest module.
+//
+// Note that the commit is trusted to be valid and only contains valid VEs from the previous block as
+// provided by a trusted cometBFT.
 func (k *Keeper) PrepareVotes(ctx context.Context, commit abci.ExtendedCommitInfo) ([]sdk.Msg, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	if err := baseapp.ValidateVoteExtensions(sdkCtx, k.skeeper, sdkCtx.BlockHeight(), sdkCtx.ChainID(), commit); err != nil {
@@ -89,30 +94,38 @@ func votesFromLastCommit(
 		allVotes = append(allVotes, selected...)
 	}
 
+	votes, err := aggregateVotes(allVotes)
+	if err != nil {
+		return nil, err
+	}
+
 	return &types.MsgAddVotes{
 		Authority: authtypes.NewModuleAddress(types.ModuleName).String(),
-		Votes:     aggregateVotes(allVotes),
+		Votes:     votes,
 	}, nil
 }
 
 // aggregateVotes aggregates the provided attestations by block header.
-func aggregateVotes(votes []*types.Vote) []*types.AggVote {
+func aggregateVotes(votes []*types.Vote) ([]*types.AggVote, error) {
 	uniqueAggs := make(map[[32]byte]*types.AggVote)
 	for _, vote := range votes {
-		key := vote.UniqueKey()
-		agg, ok := uniqueAggs[key]
+		attRoot, err := vote.AttestationRoot()
+		if err != nil {
+			return nil, err
+		}
+		agg, ok := uniqueAggs[attRoot]
 		if !ok {
 			agg = &types.AggVote{
-				BlockHeader:     vote.BlockHeader,
-				AttestationRoot: vote.AttestationRoot,
+				BlockHeader: vote.BlockHeader,
+				MsgRoot:     vote.MsgRoot,
 			}
 		}
 
 		agg.Signatures = append(agg.Signatures, vote.Signature)
-		uniqueAggs[key] = agg
+		uniqueAggs[attRoot] = agg
 	}
 
-	return sortAggregates(flattenAggs(uniqueAggs))
+	return sortAggregates(flattenAggs(uniqueAggs)), nil
 }
 
 // flattenAggs returns the values of the provided map.

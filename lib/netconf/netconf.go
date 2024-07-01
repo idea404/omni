@@ -125,6 +125,18 @@ func (n Network) EthereumChain() (Chain, bool) {
 	return Chain{}, false
 }
 
+// IsEthereumChainID returns true if the chainID is the EthereumChainID for the given network.
+func IsEthereumChain(network ID, chainID uint64) bool {
+	switch network {
+	case Mainnet:
+		return chainID == evmchain.IDEthereum
+	case Omega:
+		return chainID == evmchain.IDHolesky
+	default:
+		return chainID == evmchain.IDMockL1Fast || chainID == evmchain.IDMockL1Slow
+	}
+}
+
 // ChainName returns the chain name for the given ID or an empty string if it does not exist.
 func (n Network) ChainName(id uint64) string {
 	chain, _ := n.Chain(id)
@@ -250,12 +262,13 @@ func (n Network) StreamsBetween(srcChainID uint64, dstChainID uint64) []xchain.S
 // the Omni cross chain protocol. This is most supported Rollup EVMs, but
 // also the Omni EVM, and the Omni Consensus chain.
 type Chain struct {
-	ID            uint64           // Chain ID asa per https://chainlist.org
-	Name          string           // Chain name as per https://chainlist.org
-	PortalAddress common.Address   // Address of the omni portal contract on the chain
-	DeployHeight  uint64           // Height that the portal contracts were deployed
-	BlockPeriod   time.Duration    // Block period of the chain
-	Shards        []xchain.ShardID // Supported xmsg shards
+	ID             uint64           // Chain ID asa per https://chainlist.org
+	Name           string           // Chain name as per https://chainlist.org
+	PortalAddress  common.Address   // Address of the omni portal contract on the chain
+	DeployHeight   uint64           // Height that the portal contracts were deployed
+	BlockPeriod    time.Duration    // Block period of the chain
+	Shards         []xchain.ShardID // Supported xmsg shards
+	AttestInterval uint64           // Attest to every Nth block, even if empty.
 }
 
 // ConfLevels returns the uniq set of confirmation levels

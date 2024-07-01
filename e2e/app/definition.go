@@ -183,9 +183,11 @@ func newBackends(ctx context.Context, cfg DefinitionConfig, testnet types.Testne
 		return ethbackend.Backends{}, errors.Wrap(err, "load fireblocks key")
 	}
 
-	fireCl, err := fireblocks.New(testnet.Network, cfg.FireAPIKey, key,
+	opts := []fireblocks.Option{
 		fireblocks.WithSignNote(fmt.Sprintf("omni e2e %s %s", commandName, testnet.Network)),
-	)
+		fireblocks.WithQueryInterval(5 * time.Second), // If we retry too often we get rate limited.
+	}
+	fireCl, err := fireblocks.New(testnet.Network, cfg.FireAPIKey, key, opts...)
 	if err != nil {
 		return ethbackend.Backends{}, errors.Wrap(err, "new fireblocks")
 	}
@@ -517,17 +519,22 @@ func externalEndpoints(def Definition) xchain.RPCEndpoints {
 func networkFromDef(def Definition) netconf.Network {
 	var chains []netconf.Chain
 
+	newChain := func(chain types.EVMChain) netconf.Chain {
+		depInfo := def.DeployInfos()[chain.ChainID]
+		return netconf.Chain{
+			ID:             chain.ChainID,
+			Name:           chain.Name,
+			BlockPeriod:    chain.BlockPeriod,
+			Shards:         chain.Shards,
+			AttestInterval: chain.AttestInterval(def.Testnet.Network),
+			PortalAddress:  depInfo[types.ContractPortal].Address,
+			DeployHeight:   depInfo[types.ContractPortal].Height,
+		}
+	}
+
 	// Add all public chains
 	for _, public := range def.Testnet.PublicChains {
-		depInfo := def.DeployInfos()[public.Chain().ChainID]
-		chains = append(chains, netconf.Chain{
-			ID:            public.Chain().ChainID,
-			Name:          public.Chain().Name,
-			BlockPeriod:   public.Chain().BlockPeriod,
-			Shards:        public.Chain().Shards,
-			PortalAddress: depInfo[types.ContractPortal].Address,
-			DeployHeight:  depInfo[types.ContractPortal].Height,
-		})
+		chains = append(chains, newChain(public.Chain()))
 	}
 
 	// In monitor only mode, there is only public chains, so skip omni and anvil chains.
@@ -540,30 +547,14 @@ func networkFromDef(def Definition) netconf.Network {
 
 	// Connect to a proper omni_evm that isn't unavailable
 	omniEVM := def.Testnet.BroadcastOmniEVM()
-	omniEVMDepInfo := def.DeployInfos()[omniEVM.Chain.ChainID]
-	chains = append(chains, netconf.Chain{
-		ID:            omniEVM.Chain.ChainID,
-		Name:          omniEVM.Chain.Name,
-		BlockPeriod:   omniEVM.Chain.BlockPeriod,
-		Shards:        omniEVM.Chain.Shards,
-		PortalAddress: omniEVMDepInfo[types.ContractPortal].Address,
-		DeployHeight:  omniEVMDepInfo[types.ContractPortal].Height,
-	})
+	chains = append(chains, newChain(omniEVM.Chain))
 
 	// Add omni consensus chain
 	chains = append(chains, def.Testnet.Network.Static().OmniConsensusChain())
 
 	// Add all anvil chains
 	for _, anvil := range def.Testnet.AnvilChains {
-		depInfo := def.DeployInfos()[anvil.Chain.ChainID]
-		chains = append(chains, netconf.Chain{
-			ID:            anvil.Chain.ChainID,
-			Name:          anvil.Chain.Name,
-			BlockPeriod:   anvil.Chain.BlockPeriod,
-			Shards:        anvil.Chain.Shards,
-			PortalAddress: depInfo[types.ContractPortal].Address,
-			DeployHeight:  depInfo[types.ContractPortal].Height,
-		})
+		chains = append(chains, newChain(anvil.Chain))
 	}
 
 	return netconf.Network{

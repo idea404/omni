@@ -8,6 +8,7 @@ import (
 	ptypes "github.com/omni-network/omni/halo/portal/types"
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/ethclient"
+	"github.com/omni-network/omni/lib/xchain"
 
 	"github.com/ethereum/go-ethereum/common"
 
@@ -61,38 +62,33 @@ func NewKeeper(emilPortal ptypes.EmitPortal, storeService store.KVStoreService, 
 // getOrCreateEpoch returns a network created in the current height.
 // If one already exists, it will be returned.
 // If none already exists, a new one will be created using the previous as base.
+// New networks are emitted as cross chain messages to portals.
 func (k Keeper) getOrCreateNetwork(ctx context.Context) (*Network, error) {
-	createHeight := uint64(sdk.UnwrapSDKContext(ctx).BlockHeight())
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	createHeight := uint64(sdkCtx.BlockHeight())
+
+	var lastPortals []*Portal
 
 	latestNetworkID, err := k.networkTable.LastInsertedSequence(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get last network ID")
-	} else if latestNetworkID == 0 {
-		// Create the first empty network
-		network := &Network{
-			CreatedHeight: createHeight,
-		}
-
-		network.Id, err = k.networkTable.InsertReturningId(ctx, network)
+	} else if latestNetworkID != 0 {
+		// Get the latest network
+		lastNetwork, err := k.networkTable.Get(ctx, latestNetworkID)
 		if err != nil {
-			return nil, errors.Wrap(err, "insert first network")
+			return nil, errors.Wrap(err, "get network")
+		} else if lastNetwork.GetCreatedHeight() == createHeight {
+			// This network was created in this block, use it as is.
+			return lastNetwork, nil
 		}
 
-		return network, nil
-	}
-
-	lastNetwork, err := k.networkTable.Get(ctx, latestNetworkID)
-	if err != nil {
-		return nil, errors.Wrap(err, "get network")
-	} else if lastNetwork.GetCreatedHeight() == createHeight {
-		// This network was created in this block, use it as is.
-		return lastNetwork, nil
+		lastPortals = lastNetwork.GetPortals()
 	}
 
 	// Create a new network using the latest network as base
 	network := &Network{
 		CreatedHeight: createHeight,
-		Portals:       lastNetwork.GetPortals(),
+		Portals:       lastPortals,
 	}
 	network.Id, err = k.networkTable.InsertReturningId(ctx, network)
 	if err != nil {
@@ -100,6 +96,17 @@ func (k Keeper) getOrCreateNetwork(ctx context.Context) (*Network, error) {
 	}
 
 	k.latestCache.Set(network)
+
+	_, err = k.emilPortal.EmitMsg(
+		sdkCtx,
+		ptypes.MsgTypeNetwork,
+		network.GetId(),
+		xchain.BroadcastChainID,
+		xchain.ShardBroadcast0,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "emit portal message")
+	}
 
 	return network, nil
 }

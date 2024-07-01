@@ -226,7 +226,7 @@ func bridgeToNative(ctx context.Context, def Definition, toBridge []BridgeTest) 
 	txns := make([]*ethtypes.Transaction, len(toBridge))
 
 	for i, test := range toBridge {
-		fee, err := bridge.BridgeFee(&bind.CallOpts{Context: ctx}, test.To, test.Amount)
+		fee, err := bridge.BridgeFee(&bind.CallOpts{Context: ctx}, txOpts.From, test.To, test.Amount)
 		if err != nil {
 			return errors.Wrap(err, "bridge fee")
 		}
@@ -256,7 +256,7 @@ func bridgeToNative(ctx context.Context, def Definition, toBridge []BridgeTest) 
 // waitNativeBridges waits for all native bridge test cases to complete.
 // This is required before bridging back to L1, because the native bridge must be informed that L1 tokens are available.
 func waitNativeBridges(ctx context.Context, def Definition, bridges []BridgeTest) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	network := networkFromDef(def)

@@ -81,6 +81,12 @@ func (m *simple) ReserveNextNonce(ctx context.Context) (uint64, error) {
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to get nonce")
 		}
+
+		log.Debug(ctx, "Txmgr reset nonce",
+			"chainID", m.chainID,
+			"sender", m.cfg.From,
+			"newNonce", nonce,
+		)
 		m.nonce = &nonce
 	}
 
@@ -197,6 +203,8 @@ func (m *simple) craftTx(ctx context.Context, candidate TxCandidate) (*types.Tra
 	if candidate.Nonce == nil {
 		return nil, errors.New("invalid nil nonce")
 	}
+
+	log.Debug(ctx, "Crafting tx ", "sender", m.cfg.From, "nonce", candidate.Nonce)
 
 	gasTipCap, baseFee, err := m.suggestGasPriceCaps(ctx)
 	if err != nil {
@@ -315,8 +323,7 @@ func (m *simple) sendTx(ctx context.Context, tx *types.Transaction) (*types.Rece
 // publishTx publishes the transaction to the transaction pool. If it receives any underpriced errors
 // it will bump the fees and retry.
 // Returns the latest fee bumped tx, and a boolean indicating whether the tx was sent or not.
-func (m *simple) publishTx(ctx context.Context, tx *types.Transaction, sendState *SendState,
-	bumpFeesImmediately bool) (*types.Transaction, bool) {
+func (m *simple) publishTx(ctx context.Context, tx *types.Transaction, sendState *SendState, bumpFeesImmediately bool) (*types.Transaction, bool) {
 	for {
 		if ctx.Err() != nil {
 			return tx, false
@@ -348,6 +355,8 @@ func (m *simple) publishTx(ctx context.Context, tx *types.Transaction, sendState
 			return tx, true
 		}
 
+		// Handle known errors. The errors are returned by json-rpc and therefore we
+		// can't rely on the error type and need to compare the error message instead.
 		switch {
 		case errStringMatch(err, core.ErrNonceTooLow):
 			log.Warn(ctx, "Nonce too low", err)
@@ -361,8 +370,11 @@ func (m *simple) publishTx(ctx context.Context, tx *types.Transaction, sendState
 		case errStringMatch(err, txpool.ErrUnderpriced):
 			log.Warn(ctx, "Transaction is underpriced", err)
 			continue // retry with fee bump
+		case errStringMatch(err, core.ErrIntrinsicGas):
+			log.Warn(ctx, "Intrinsic gas too low", err)
+			continue // retry with fee bump
 		default:
-			log.Warn(ctx, "Unknown error publishing transaction", err)
+			log.Error(ctx, "Unknown error publishing transaction", err)
 		}
 
 		// on non-underpriced error return immediately; will retry on next resubmission timeout

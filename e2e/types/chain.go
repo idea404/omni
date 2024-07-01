@@ -34,6 +34,12 @@ var (
 		IsPublic: true,
 		Shards:   allShards,
 	}
+
+	chainBaseSepolia = EVMChain{
+		Metadata: mustMetadata(evmchain.IDBaseSepolia),
+		IsPublic: true,
+		Shards:   allShards,
+	}
 )
 
 // OmniEVMByNetwork returns the Omni evm chain definition by netconf network.
@@ -43,8 +49,10 @@ func OmniEVMByNetwork(network netconf.ID) EVMChain {
 		shards = allShards // Enable all shards for testing.
 	}
 
+	chainID := network.Static().OmniExecutionChainID
+
 	return EVMChain{
-		Metadata: mustMetadata(network.Static().OmniExecutionChainID),
+		Metadata: mustMetadata(chainID),
 		Shards:   shards,
 	}
 }
@@ -75,6 +83,8 @@ func PublicChainByName(name string) (EVMChain, error) {
 		return chainArbSepolia, nil
 	case chainOpSepolia.Name:
 		return chainOpSepolia, nil
+	case chainBaseSepolia.Name:
+		return chainBaseSepolia, nil
 	case chainEthereum.Name:
 		return chainEthereum, nil
 	default:
@@ -91,6 +101,8 @@ func PublicRPCByName(name string) string {
 		return "https://sepolia-rollup.arbitrum.io/rpc"
 	case chainOpSepolia.Name:
 		return "https://sepolia.optimism.io"
+	case chainBaseSepolia.Name:
+		return "https://sepolia.base.org"
 	case chainEthereum.Name:
 		return "https://ethereum-rpc.publicnode.com"
 	default:

@@ -11,6 +11,7 @@ import (
 	halocmd "github.com/omni-network/omni/halo/cmd"
 	halocfg "github.com/omni-network/omni/halo/config"
 	cprovider "github.com/omni-network/omni/lib/cchain/provider"
+	"github.com/omni-network/omni/lib/ethclient"
 	"github.com/omni-network/omni/lib/log"
 	"github.com/omni-network/omni/lib/netconf"
 	"github.com/omni-network/omni/lib/tutil"
@@ -127,11 +128,6 @@ func testCProvider(t *testing.T, ctx context.Context, cprov cprovider.Provider) 
 	_, ok, err = cprov.ValidatorSet(ctx, 33)
 	require.NoError(t, err)
 	require.False(t, ok)
-
-	// Ensure the xblock msg streamOffset is the val set id.
-	_, ok, err = cprov.ValidatorSet(ctx, xblock.Msgs[0].StreamOffset)
-	require.NoError(t, err)
-	require.True(t, ok)
 }
 
 func setupSimnet(t *testing.T) haloapp.Config {
@@ -155,10 +151,14 @@ func setupSimnet(t *testing.T) haloapp.Config {
 		Comet:  cmtCfg,
 	}
 
-	err := halocmd.InitFiles(log.WithNoopLogger(context.Background()), halocmd.InitConfig{
-		HomeDir: homeDir,
-		Network: netconf.Simnet,
-		Cosmos:  true,
+	executionGenesis, err := ethclient.MockGenesisBlock()
+	tutil.RequireNoError(t, err)
+
+	err = halocmd.InitFiles(log.WithNoopLogger(context.Background()), halocmd.InitConfig{
+		HomeDir:       homeDir,
+		Network:       netconf.Simnet,
+		Cosmos:        true,
+		ExecutionHash: executionGenesis.Hash(),
 	})
 	tutil.RequireNoError(t, err)
 

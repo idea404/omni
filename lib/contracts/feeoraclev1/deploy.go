@@ -56,7 +56,7 @@ func getDeployCfg(chainID uint64, network netconf.ID) (DeploymentConfig, error) 
 	}
 
 	if network == netconf.Omega {
-		return testnetCfg(), nil
+		return omegaCfg(), nil
 	}
 
 	if network == netconf.Staging {
@@ -70,7 +70,7 @@ func getDeployCfg(chainID uint64, network netconf.ID) (DeploymentConfig, error) 
 
 func mainnetCfg() DeploymentConfig {
 	return DeploymentConfig{
-		Owner:        eoa.MustAddress(netconf.Mainnet, eoa.RolePortalAdmin),
+		Owner:        eoa.MustAddress(netconf.Mainnet, eoa.RoleAdmin),
 		Manager:      eoa.MustAddress(netconf.Mainnet, eoa.RoleMonitor),
 		Deployer:     eoa.MustAddress(netconf.Mainnet, eoa.RoleDeployer),
 		ProxyAdmin:   contracts.MainnetProxyAdmin(),
@@ -79,12 +79,12 @@ func mainnetCfg() DeploymentConfig {
 	}
 }
 
-func testnetCfg() DeploymentConfig {
+func omegaCfg() DeploymentConfig {
 	return DeploymentConfig{
-		Owner:        eoa.MustAddress(netconf.Omega, eoa.RolePortalAdmin),
+		Owner:        eoa.MustAddress(netconf.Omega, eoa.RoleAdmin),
 		Manager:      eoa.MustAddress(netconf.Omega, eoa.RoleMonitor),
 		Deployer:     eoa.MustAddress(netconf.Omega, eoa.RoleDeployer),
-		ProxyAdmin:   contracts.TestnetProxyAdmin(),
+		ProxyAdmin:   contracts.OmegaProxyAdmin(),
 		BaseGasLimit: 50_000,
 		ProtocolFee:  big.NewInt(0),
 	}
@@ -92,7 +92,7 @@ func testnetCfg() DeploymentConfig {
 
 func devnetCfg() DeploymentConfig {
 	return DeploymentConfig{
-		Owner:        eoa.MustAddress(netconf.Devnet, eoa.RolePortalAdmin),
+		Owner:        eoa.MustAddress(netconf.Devnet, eoa.RoleAdmin),
 		Manager:      eoa.MustAddress(netconf.Devnet, eoa.RoleMonitor),
 		Deployer:     eoa.MustAddress(netconf.Devnet, eoa.RoleDeployer),
 		ProxyAdmin:   contracts.DevnetProxyAdmin(),
@@ -103,7 +103,7 @@ func devnetCfg() DeploymentConfig {
 
 func stagingCfg() DeploymentConfig {
 	return DeploymentConfig{
-		Owner:        eoa.MustAddress(netconf.Staging, eoa.RolePortalAdmin),
+		Owner:        eoa.MustAddress(netconf.Staging, eoa.RoleAdmin),
 		Manager:      eoa.MustAddress(netconf.Staging, eoa.RoleMonitor),
 		Deployer:     eoa.MustAddress(netconf.Staging, eoa.RoleDeployer),
 		ProxyAdmin:   contracts.StagingProxyAdmin(),
@@ -128,7 +128,7 @@ func Deploy(ctx context.Context, network netconf.ID, chainID uint64, destChainID
 		return common.Address{}, nil, errors.Wrap(err, "bind opts")
 	}
 
-	feeparams, err := feeParams(ctx, chainID, destChainIDs, backends, coingecko.New())
+	feeparams, err := feeParams(ctx, network, chainID, destChainIDs, backends, coingecko.New())
 	if err != nil {
 		return common.Address{}, nil, errors.Wrap(err, "fee params")
 	}

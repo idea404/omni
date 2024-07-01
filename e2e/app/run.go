@@ -11,6 +11,7 @@ import (
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/k1util"
 	"github.com/omni-network/omni/lib/log"
+	"github.com/omni-network/omni/lib/netconf"
 
 	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
 
@@ -46,7 +47,9 @@ type DeployConfig struct {
 // Deploy a new e2e network. It also starts all services in order to deploy private portals.
 // It also returns an optional deployed ping pong contract is enabled.
 func Deploy(ctx context.Context, def Definition, cfg DeployConfig) (*pingpong.XDapp, error) {
-	if def.Testnet.Network.IsProtected() {
+	if def.Testnet.Network == netconf.Omega {
+		log.Warn(ctx, "Temporarily allowing protected network deploy, remove this after success", nil)
+	} else if def.Testnet.Network.IsProtected() {
 		// If a protected network needs to be deployed temporarily comment out this check.
 		return nil, errors.New("cannot deploy protected network", "network", def.Testnet.Network)
 	}
@@ -105,7 +108,7 @@ func Deploy(ctx context.Context, def Definition, cfg DeployConfig) (*pingpong.XD
 	}
 	logRPCs(ctx, def)
 
-	if err := initXRegistries(ctx, def); err != nil {
+	if err := initPortalRegistry(ctx, def); err != nil {
 		return nil, err
 	}
 
@@ -182,6 +185,8 @@ func E2ETest(ctx context.Context, def Definition, cfg E2ETestConfig) error {
 
 	stopValidatorUpdates := StartValidatorUpdates(ctx, def)
 
+	stopAddingPortals := startAddingMockPortals(ctx, def)
+
 	msgBatches := []int{3, 2, 1} // Send 6 msgs from each chain to each other chain
 	msgsErr := StartSendingXMsgs(ctx, def.Netman(), def.Backends(), msgBatches...)
 
@@ -217,6 +222,10 @@ func E2ETest(ctx context.Context, def Definition, cfg E2ETestConfig) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if err := stopAddingPortals(); err != nil {
+		return errors.Wrap(err, "stop adding portals")
 	}
 
 	network := networkFromDef(def)
@@ -349,7 +358,7 @@ func checkSupportedChains(ctx context.Context, n netman.Manager) (bool, error) {
 				continue
 			}
 
-			supported, err := src.Contract.IsSupportedChain(&bind.CallOpts{Context: ctx}, dest.Chain.ChainID)
+			supported, err := src.Contract.IsSupportedDest(&bind.CallOpts{Context: ctx}, dest.Chain.ChainID)
 			if err != nil {
 				return false, errors.Wrap(err, "check supported chain")
 			} else if !supported {

@@ -49,6 +49,8 @@ type Keeper struct {
 	voteWindow     uint64
 	voteExtLimit   uint64
 	trimLag        uint64
+
+	valAddrCache *valAddrCache
 }
 
 // New returns a new attestation keeper.
@@ -88,6 +90,7 @@ func New(
 		voteExtLimit:   voteExtLimit,
 		trimLag:        trimLag,
 		portalRegistry: stubPortalRegistry{},
+		valAddrCache:   new(valAddrCache),
 	}
 
 	return k, nil
@@ -149,11 +152,14 @@ func (k *Keeper) addOne(ctx context.Context, agg *types.AggVote, valSetID uint64
 	defer latency("add_one")()
 
 	header := agg.BlockHeader
-	keyHash := agg.UniqueKey()
+	attRoot, err := agg.AttestationRoot()
+	if err != nil {
+		return errors.Wrap(err, "attestation root")
+	}
 
 	// Get existing attestation (by unique key) or insert new one.
 	var attID uint64
-	existing, err := k.attTable.GetByKeyHash(ctx, keyHash[:])
+	existing, err := k.attTable.GetByAttestationRoot(ctx, attRoot[:])
 	if ormerrors.IsNotFound(err) {
 		// Insert new attestation
 		attID, err = k.attTable.InsertReturningId(ctx, &Attestation{
@@ -162,8 +168,8 @@ func (k *Keeper) addOne(ctx context.Context, agg *types.AggVote, valSetID uint64
 			BlockOffset:     agg.BlockHeader.Offset,
 			BlockHeight:     agg.BlockHeader.Height,
 			BlockHash:       agg.BlockHeader.Hash,
-			AttestationRoot: agg.AttestationRoot,
-			KeyHash:         keyHash[:],
+			MsgRoot:         agg.MsgRoot,
+			AttestationRoot: attRoot[:],
 			Status:          uint32(Status_Pending),
 			ValidatorSetId:  0, // Unknown at this point.
 			CreatedHeight:   uint64(sdk.UnwrapSDKContext(ctx).BlockHeight()),
@@ -377,9 +383,9 @@ func (k *Keeper) ListAttestationsFrom(ctx context.Context, chainID uint64, confL
 				Height:    att.GetBlockHeight(),
 				Hash:      att.GetBlockHash(),
 			},
-			ValidatorSetId:  att.GetValidatorSetId(),
-			AttestationRoot: att.GetAttestationRoot(),
-			Signatures:      sigs,
+			ValidatorSetId: att.GetValidatorSetId(),
+			MsgRoot:        att.GetMsgRoot(),
+			Signatures:     sigs,
 		})
 	}
 
@@ -525,7 +531,7 @@ func (k *Keeper) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote) (*abci.R
 		if ok, err := k.portalRegistry.SupportedChain(ctx, vote.BlockHeader.ChainId); err != nil {
 			return nil, errors.Wrap(err, "supported chain")
 		} else if !ok {
-			// Skip votes for unsupported chains.
+			log.Warn(ctx, "Skipping own vote for unsupported chain", nil, "chain", k.namer(vote.BlockHeader.XChainVersion()))
 			continue
 		}
 
@@ -584,6 +590,8 @@ func (k *Keeper) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote) (*abci.R
 }
 
 // VerifyVoteExtension verifies a vote extension.
+//
+// Note this code assumes that cometBFT will only call this function for an active validator in the current set.
 func (k *Keeper) VerifyVoteExtension(ctx sdk.Context, req *abci.RequestVerifyVoteExtension) (
 	*abci.ResponseVerifyVoteExtension, error,
 ) {
@@ -594,6 +602,12 @@ func (k *Keeper) VerifyVoteExtension(ctx sdk.Context, req *abci.RequestVerifyVot
 		Status: abci.ResponseVerifyVoteExtension_REJECT,
 	}
 
+	// Get the ethereum address of the validator
+	ethAddr, err := k.getValEthAddr(ctx, req.ValidatorAddress)
+	if err != nil {
+		return nil, err // This error should never occur
+	}
+
 	// Adding logging attributes to sdk context is a bit tricky
 	ctx = ctx.WithContext(log.WithCtx(ctx, log.Hex7("validator", req.ValidatorAddress)))
 
@@ -602,7 +616,7 @@ func (k *Keeper) VerifyVoteExtension(ctx sdk.Context, req *abci.RequestVerifyVot
 		log.Warn(ctx, "Rejecting invalid vote extension", err)
 		return respReject, nil
 	} else if !ok {
-		log.Info(ctx, "Accepting nil vote extension") // This can happen in some edge-cases.
+		log.Debug(ctx, "Accepting nil vote extension") // This can happen if no non-empty blocks are present.
 		return respAccept, nil
 	} else if len(votes.Votes) > int(k.voteExtLimit) {
 		log.Warn(ctx, "Rejecting vote extension exceeding limit", nil, "count", len(votes.Votes), "limit", k.voteExtLimit)
@@ -615,10 +629,16 @@ func (k *Keeper) VerifyVoteExtension(ctx sdk.Context, req *abci.RequestVerifyVot
 			return respReject, nil
 		}
 
+		// Ensure the votes are from the requesting validator itself.
+		if common.BytesToAddress(vote.Signature.ValidatorAddress) != ethAddr {
+			log.Warn(ctx, "Rejecting mismatching vote and req validator address", nil, "vote", ethAddr, "req", req.ValidatorAddress)
+			return respReject, nil
+		}
+
 		if ok, err := k.portalRegistry.SupportedChain(ctx, vote.BlockHeader.ChainId); err != nil {
 			return nil, errors.Wrap(err, "supported chain")
 		} else if !ok {
-			log.Warn(ctx, "Rejecting vote for unsupported chain", nil, "chain", vote.BlockHeader.ChainId)
+			log.Warn(ctx, "Rejecting vote for unsupported chain", nil, "chain", k.namer(vote.BlockHeader.XChainVersion()))
 			return respReject, nil
 		}
 
@@ -663,7 +683,11 @@ func (k *Keeper) prevBlockValSet(ctx context.Context) (ValSet, error) {
 
 	valsByPower := make(map[common.Address]int64)
 	for _, val := range resp.Validators {
-		valsByPower[common.BytesToAddress(val.Address)] = val.Power
+		ethAddr, err := val.EthereumAddress()
+		if err != nil {
+			return ValSet{}, err
+		}
+		valsByPower[ethAddr] = val.Power
 	}
 
 	return ValSet{
@@ -689,7 +713,6 @@ func (k *Keeper) windowCompare(ctx context.Context, chainVer xchain.ChainVersion
 // verifyAggVotes verifies the given aggregates votes:
 // - Ensure all votes are from validators in the provided set.
 // - Ensure the vote block header is in the vote window.
-// - Ensure votes represent at least 2/3 of the total voting power. <- This isn't done?
 func (k *Keeper) verifyAggVotes(ctx context.Context, valset ValSet, aggs []*types.AggVote) error {
 	for _, agg := range aggs {
 		if err := agg.Verify(); err != nil {
@@ -734,9 +757,10 @@ func (k *Keeper) deleteBefore(ctx context.Context, height uint64) error {
 	// Cache latest offset by chain version so we don't delete it.
 	// TODO(corver): Add tests for this.
 	latestByChain := make(map[xchain.ChainVersion]uint64)
+	// Returns the offset of the latest attestation and true if one is found, 0 and false otherwise
 	getLatest := func(chainVer xchain.ChainVersion) (uint64, bool, error) {
 		if latest, ok := latestByChain[chainVer]; ok {
-			return latest, false, nil
+			return latest, true, nil
 		}
 
 		latest, ok, err := k.latestAttestation(ctx, chainVer)
@@ -771,9 +795,10 @@ func (k *Keeper) deleteBefore(ctx context.Context, height uint64) error {
 		// Never delete anything after the last approved attestation offset per chain,
 		// even if it is very old. Otherwise, we could introduce a gap
 		// once we start catching up.
+		// Also, don't delete anything if we don't have an approved attestation yet (leave all pending attestations).
 		if latest, ok, err := getLatest(att.XChainVersion()); err != nil {
 			return err
-		} else if ok && att.GetBlockOffset() >= latest {
+		} else if !ok || att.GetBlockOffset() >= latest {
 			continue
 		}
 

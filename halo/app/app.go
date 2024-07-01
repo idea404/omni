@@ -4,13 +4,14 @@ import (
 	attestkeeper "github.com/omni-network/omni/halo/attest/keeper"
 	atypes "github.com/omni-network/omni/halo/attest/types"
 	"github.com/omni-network/omni/halo/comet"
-	evmengkeeper "github.com/omni-network/omni/halo/evmengine/keeper"
 	"github.com/omni-network/omni/halo/evmslashing"
 	"github.com/omni-network/omni/halo/evmstaking"
 	registrykeeper "github.com/omni-network/omni/halo/registry/keeper"
 	valsynckeeper "github.com/omni-network/omni/halo/valsync/keeper"
 	"github.com/omni-network/omni/lib/errors"
 	"github.com/omni-network/omni/lib/ethclient"
+	evmengkeeper "github.com/omni-network/omni/octane/evmengine/keeper"
+	etypes "github.com/omni-network/omni/octane/evmengine/types"
 
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
@@ -73,6 +74,7 @@ func newApp(
 	engineCl ethclient.EngineClient,
 	voter atypes.Voter,
 	namer atypes.ChainVerNameFunc,
+	feeRecProvider etypes.FeeRecipientProvider,
 	baseAppOpts ...func(*baseapp.BaseApp),
 ) (*App, error) {
 	depCfg := depinject.Configs(
@@ -82,6 +84,7 @@ func newApp(
 			engineCl,
 			namer,
 			voter,
+			feeRecProvider,
 		),
 	)
 
@@ -134,7 +137,7 @@ func newApp(
 		bapp.SetPrepareProposal(app.EVMEngKeeper.PrepareProposal)
 
 		// Route proposed messages to keepers for verification and external state updates.
-		bapp.SetProcessProposal(makeProcessProposalHandler(app))
+		bapp.SetProcessProposal(makeProcessProposalHandler(makeProcessProposalRouter(app), app.txConfig))
 
 		// Use attest keeper to extend votes.
 		bapp.SetExtendVoteHandler(app.AttestKeeper.ExtendVote)

@@ -162,24 +162,38 @@ type Block struct {
 }
 
 // ShouldAttest returns true if the xblock should be attested by the omni consensus chain validators.
-// All "non-empty" xblocks should be attested to and are assigned an incremented XBlockOffset.
-func (b Block) ShouldAttest() bool {
-	return len(b.Msgs) > 0
+// All "non-empty" xblocks should be attested to.
+// Every Nth block based on the chain's attest interval should be attested to.
+// Attested blocks are assigned an incremented XBlockOffset.
+func (b Block) ShouldAttest(attestInterval uint64) bool {
+	if len(b.Msgs) > 0 {
+		return true
+	}
+
+	if attestInterval == 0 {
+		return false // Avoid empty attestations for zero interval.
+	}
+
+	return b.BlockHeight%attestInterval == 0
 }
 
 // Vote by a validator of a cross-chain Block.
 type Vote struct {
-	BlockHeader                 // BlockHeader identifies the cross-chain Block
-	AttestationRoot common.Hash // Attestation merkle root of the cross-chain Block
-	Signature       SigTuple    // Validator signature and public key
+	BlockHeader             // BlockHeader identifies the cross-chain Block
+	MsgRoot     common.Hash // Merkle root of all messages in the cross-chain Block
+	Signature   SigTuple    // Validator signature and public key
 }
 
 // Attestation containing quorum votes by the validator set of a cross-chain Block.
 type Attestation struct {
-	BlockHeader                 // BlockHeader identifies the cross-chain Block
-	ValidatorSetID  uint64      // Validator set that approved this attestation.
-	AttestationRoot common.Hash // Attestation merkle root of the cross-chain Block
-	Signatures      []SigTuple  // Validator signatures and public keys
+	BlockHeader                // BlockHeader identifies the cross-chain Block
+	ValidatorSetID uint64      // Validator set that approved this attestation.
+	MsgRoot        common.Hash // Merkle root of all messages in the cross-chain Block
+	Signatures     []SigTuple  // Validator signatures and public keys
+}
+
+func (a Attestation) AttestationRoot() ([32]byte, error) {
+	return AttestationRoot(a.BlockHeader, a.MsgRoot)
 }
 
 // SigTuple is a validator signature and address.

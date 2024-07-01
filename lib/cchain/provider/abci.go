@@ -7,6 +7,7 @@ import (
 
 	atypes "github.com/omni-network/omni/halo/attest/types"
 	ptypes "github.com/omni-network/omni/halo/portal/types"
+	rtypes "github.com/omni-network/omni/halo/registry/types"
 	vtypes "github.com/omni-network/omni/halo/valsync/types"
 	"github.com/omni-network/omni/lib/cchain"
 	"github.com/omni-network/omni/lib/errors"
@@ -16,8 +17,6 @@ import (
 	"github.com/omni-network/omni/lib/xchain"
 
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
-
-	"github.com/ethereum/go-ethereum/common"
 
 	errorsmod "cosmossdk.io/errors"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -41,6 +40,7 @@ func NewABCIProvider(abci ABCIClient, network netconf.ID, chainNamer func(xchain
 	acl := atypes.NewQueryClient(rpcAdaptor{abci: abci})
 	vcl := vtypes.NewQueryClient(rpcAdaptor{abci: abci})
 	pcl := ptypes.NewQueryClient(rpcAdaptor{abci: abci})
+	rcl := rtypes.NewQueryClient(rpcAdaptor{abci: abci})
 
 	return Provider{
 		fetch:       newABCIFetchFunc(acl),
@@ -48,6 +48,7 @@ func NewABCIProvider(abci ABCIClient, network netconf.ID, chainNamer func(xchain
 		window:      newABCIWindowFunc(acl),
 		valset:      newABCIValsetFunc(vcl),
 		portalBlock: newABCIPortalBlockFunc(pcl),
+		networkFunc: newABCINetworkFunc(rcl),
 		chainID:     newChainIDFunc(abci),
 		header:      abci.Header,
 		backoffFunc: backoffFunc,
@@ -103,8 +104,12 @@ func newABCIValsetFunc(cl vtypes.QueryClient) valsetFunc {
 
 		vals := make([]cchain.Validator, 0, len(resp.Validators))
 		for _, v := range resp.Validators {
+			ethAddr, err := v.EthereumAddress()
+			if err != nil {
+				return valSetResponse{}, false, err
+			}
 			vals = append(vals, cchain.Validator{
-				Address: common.BytesToAddress(v.Address),
+				Address: ethAddr,
 				Power:   v.Power,
 			})
 		}
@@ -209,6 +214,25 @@ func newABCIPortalBlockFunc(pcl ptypes.QueryClient) portalBlockFunc {
 		} else if err != nil {
 			incQueryErr(endpoint)
 			return nil, false, errors.Wrap(err, "abci query portal block")
+		}
+
+		return resp, true, nil
+	}
+}
+func newABCINetworkFunc(pcl rtypes.QueryClient) networkFunc {
+	return func(ctx context.Context, networkID uint64, latest bool) (*rtypes.NetworkResponse, bool, error) {
+		const endpoint = "registry_network"
+		defer latency(endpoint)()
+
+		ctx, span := tracer.Start(ctx, spanName(endpoint))
+		defer span.End()
+
+		resp, err := pcl.Network(ctx, &rtypes.NetworkRequest{Id: networkID, Latest: latest})
+		if errors.Is(err, sdkerrors.ErrKeyNotFound) {
+			return nil, false, nil
+		} else if err != nil {
+			incQueryErr(endpoint)
+			return nil, false, errors.Wrap(err, "abci query network")
 		}
 
 		return resp, true, nil
